@@ -5,13 +5,18 @@ on:
     branches:
       - main
     paths:
-      - 'package.json'  # Only trigger when version changes
+      - 'package.json'
+      - 'README.md'
+      - 'src/**'
+      - 'data/**'
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -25,21 +30,37 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Check if version changed
+      - name: Check versions and auto-bump if needed
         id: version
         run: |
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           NPM_VERSION=$(npm view ds-mcp-flowise version 2>/dev/null || echo "0.0.0")
-          if [ "$PACKAGE_VERSION" != "$NPM_VERSION" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "Version changed: $NPM_VERSION -> $PACKAGE_VERSION"
+
+          if [ "$PACKAGE_VERSION" = "$NPM_VERSION" ]; then
+            echo "Version unchanged, auto-bumping patch version..."
+            npm version patch --no-git-tag-version
+            NEW_VERSION=$(node -p "require('./package.json').version")
+            echo "Bumped to $NEW_VERSION"
+            echo "bumped=true" >> $GITHUB_OUTPUT
+            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "Version unchanged: $PACKAGE_VERSION"
+            echo "Version already changed: $NPM_VERSION -> $PACKAGE_VERSION"
+            echo "bumped=false" >> $GITHUB_OUTPUT
+            echo "version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
           fi
+          echo "publish=true" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
+        if: steps.version.outputs.bumped == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "Auto-bump version to ${{ steps.version.outputs.version }} for npm sync"
+          git push
 
       - name: Publish to npm
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.publish == 'true'
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
