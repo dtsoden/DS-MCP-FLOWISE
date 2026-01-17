@@ -17,6 +17,19 @@ When connected to Claude Code (or other MCP clients), this server lets the AI:
 
 Add this to your Claude Code MCP configuration (`claude_desktop_config.json` or via settings):
 
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "flowise": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "ds-mcp-flowise"]
+    }
+  }
+}
+```
+
+**Mac / Linux:**
 ```json
 {
   "mcpServers": {
@@ -99,6 +112,20 @@ npm install -g ds-mcp-flowise
 ```
 
 Then in your MCP config:
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "flowise": {
+      "command": "cmd",
+      "args": ["/c", "ds-mcp-flowise"]
+    }
+  }
+}
+```
+
+**Mac / Linux:**
 ```json
 {
   "mcpServers": {
@@ -119,6 +146,20 @@ npm run build
 ```
 
 Then in your MCP config:
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "flowise": {
+      "command": "node",
+      "args": ["C:\\path\\to\\DS-MCP-FLOWISE\\dist\\index.js"]
+    }
+  }
+}
+```
+
+**Mac / Linux:**
 ```json
 {
   "mcpServers": {
