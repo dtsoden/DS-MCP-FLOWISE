@@ -82,6 +82,8 @@ Once configured, you can ask Claude:
 - "Create a new chatflow with this design and deploy it"
 - "Update the existing chatflow with these changes"
 
+> **Note:** The Flowise API currently only supports **chatflows**. Agentflows must be created through the Flowise UI by importing the generated JSON.
+
 ### Security Notes
 
 - Never commit your `.env` file to version control
