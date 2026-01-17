@@ -45,9 +45,11 @@ That's it. No cloning, no building. The `npx` command downloads and runs it auto
 
 ### 2. Start a Conversation
 
-Open Claude Code and describe what you want to build:
+Open Claude Code and **explicitly tell it to use the flowise tools**:
 
-> "Build me a RAG chatbot that uses Pinecone for vector storage and OpenAI for the LLM"
+> "**Use the flowise tools** to build me a RAG chatbot that uses Pinecone for vector storage and OpenAI for the LLM. Give me the JSON to import into Flowise."
+
+**Important:** Without mentioning "flowise tools" or "flowise MCP", Claude may try to build a chat app from scratch instead of generating a Flowise chatflow.
 
 ### 3. Get Your Flow
 
@@ -212,13 +214,22 @@ Then in your MCP config:
 
 ## Example Prompts
 
+**Important:** You must explicitly tell Claude to use the flowise MCP tools, otherwise it may try to build something from scratch instead of using Flowise nodes.
+
 Once connected, try asking Claude:
 
-- "What vector stores does Flowise support?"
-- "Show me how to build a simple chatbot with memory"
-- "Create a RAG flow using Pinecone and Claude"
-- "What nodes can connect to a ConversationChain?"
-- "Build me an agent that can search the web and query a database"
+- "**Use the flowise tools** to search for Ollama nodes and build me a chatflow JSON"
+- "**Using the flowise MCP**, what vector stores does Flowise support?"
+- "**Use flowise tools** to build a simple chatbot with memory and give me the JSON to import"
+- "**With the flowise MCP**, create a RAG flow using Pinecone and OpenAI embeddings"
+- "**Use the flowise search** to find nodes that can connect to a ConversationChain"
+- "**Using flowise tools**, build me an agent that can search the web and query a database"
+
+The key is to include phrases like:
+- "use the flowise tools"
+- "using the flowise MCP"
+- "with the flowise MCP"
+- "use flowise search"
 
 ## What's Included
 
