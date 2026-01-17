@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Flowise source (cloned for extraction)
+flowise-source/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Database (can be regenerated)
+# data/flowise.db
+# data/flowise.db-wal
+# data/flowise.db-shm
+
+# Keep the extracted JSON and database
+!data/
+!data/*.json
+!data/*.db

@@ -1,0 +1,39 @@
+{
+  "extractedAt": "2026-01-17T20:45:56.390Z",
+  "totalNodes": 311,
+  "categories": [
+    "Agent Flows",
+    "Agents",
+    "Analytic",
+    "Cache",
+    "Chains",
+    "Chat Models",
+    "Document Loaders",
+    "Embeddings",
+    "Engine",
+    "Graph",
+    "LLMs",
+    "Memory",
+    "Moderation",
+    "Multi Agents",
+    "Prompts",
+    "Record Manager",
+    "Response Synthesizer",
+    "Retrievers",
+    "Sequential Agents",
+    "SpeechToText",
+    "Text Splitters",
+    "Tools",
+    "Tools (MCP)",
+    "Unknown",
+    "Utilities",
+    "Vector Stores"
+  ],
+  "totalTemplates": 64,
+  "templatesByType": {
+    "chatflow": 24,
+    "agentflow": 14,
+    "agentflowv2": 13,
+    "tool": 13
+  }
+}
