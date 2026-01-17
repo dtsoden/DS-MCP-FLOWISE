@@ -1,40 +1,86 @@
 # DS-MCP-FLOWISE
 
-MCP (Model Context Protocol) server for building and managing [Flowise](https://flowiseai.com/) chatflows and agentflows. Provides AI assistants (Claude, GPT, etc.) with comprehensive knowledge of Flowise nodes and tools for workflow creation.
+MCP (Model Context Protocol) server that gives AI assistants (Claude, GPT, etc.) deep knowledge of [Flowise](https://flowiseai.com/) nodes so they can help you design and build chatflows and agentflows.
 
-## Features
+## What This Does
 
-- **Complete Node Database**: All 390+ Flowise nodes with full schemas, inputs, and descriptions
-- **Template Library**: 50+ marketplace templates as working examples
-- **Intelligent Search**: Full-text search across nodes and templates
-- **Flow Validation**: Verify flows before deploying
-- **Compatibility Finder**: Discover which nodes can connect together
-- **Flow Skeletons**: Generate starting points for common use cases
+When connected to Claude Code (or other MCP clients), this server lets the AI:
+- Know all 311 Flowise nodes and their configurations
+- Understand how nodes connect together
+- Design complete flows based on your requirements
+- Output valid JSON you can import into Flowise
 
-## Installation
+## Quick Start
 
-### Quick Start with Claude Code
+### 1. Add to Claude Code
+
+Add this to your Claude Code MCP configuration (`claude_desktop_config.json` or via settings):
+
+```json
+{
+  "mcpServers": {
+    "flowise": {
+      "command": "npx",
+      "args": ["-y", "ds-mcp-flowise"]
+    }
+  }
+}
+```
+
+That's it. No cloning, no building. The `npx` command downloads and runs it automatically.
+
+### 2. Start a Conversation
+
+Open Claude Code and describe what you want to build:
+
+> "Build me a RAG chatbot that uses Pinecone for vector storage and OpenAI for the LLM"
+
+### 3. Get Your Flow
+
+Claude will use the MCP tools to:
+- Find the right nodes (ChatOpenAI, Pinecone, embeddings, etc.)
+- Check their schemas and required inputs
+- Design the complete flow
+- Output the JSON with all nodes and edges
+
+### 4. Import into Flowise
+
+1. Open Flowise
+2. Create a new Chatflow or Agentflow
+3. Click the menu (⋮) → **Load Chatflow**
+4. Paste the JSON Claude gave you
+5. Configure credentials (API keys) for each node
+6. Save and test
+
+## Alternative Installation Methods
+
+### Global Install (npm)
 
 ```bash
-# Clone the repository
+npm install -g ds-mcp-flowise
+```
+
+Then in your MCP config:
+```json
+{
+  "mcpServers": {
+    "flowise": {
+      "command": "ds-mcp-flowise"
+    }
+  }
+}
+```
+
+### Build from Source
+
+```bash
 git clone https://github.com/dtsoden/DS-MCP-FLOWISE.git
 cd DS-MCP-FLOWISE
-
-# Install dependencies
 npm install
-
-# Build the database (extracts from Flowise source)
-npm run extract
-npm run prepare-db
-
-# Build the server
 npm run build
 ```
 
-### Add to Claude Code
-
-Add to your Claude Code MCP configuration:
-
+Then in your MCP config:
 ```json
 {
   "mcpServers": {
@@ -46,38 +92,23 @@ Add to your Claude Code MCP configuration:
 }
 ```
 
-### Add to Claude Desktop
-
-Add to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "flowise": {
-      "command": "node",
-      "args": ["/path/to/DS-MCP-FLOWISE/dist/index.js"]
-    }
-  }
-}
-```
-
-## Tools
+## Available Tools
 
 ### Node Discovery
 
 | Tool | Description |
 |------|-------------|
-| `list_categories` | List all node categories with counts |
+| `list_categories` | List all 26 node categories with counts |
 | `list_nodes` | List nodes, optionally filtered by category |
 | `get_node_schema` | Get detailed schema for a node including all inputs |
-| `search_nodes` | Full-text search across nodes |
+| `search_nodes` | Search nodes by keyword |
 | `find_compatible_nodes` | Find nodes that can connect to a given node |
 
 ### Template Library
 
 | Tool | Description |
 |------|-------------|
-| `list_templates` | List marketplace templates by type |
+| `list_templates` | List 64 marketplace templates by type |
 | `get_template` | Get complete template with nodes and edges |
 
 ### Flow Building
@@ -87,86 +118,45 @@ Add to `claude_desktop_config.json`:
 | `validate_flow` | Validate a flow's nodes and connections |
 | `generate_flow_skeleton` | Generate a starting flow for common use cases |
 
-## Example Usage
+## Example Prompts
 
-### Discover Available Nodes
+Once connected, try asking Claude:
 
-```
-Use list_categories to see all node types
+- "What vector stores does Flowise support?"
+- "Show me how to build a simple chatbot with memory"
+- "Create a RAG flow using Pinecone and Claude"
+- "What nodes can connect to a ConversationChain?"
+- "Build me an agent that can search the web and query a database"
 
-Use list_nodes with category="Chat Models" to see chat models
+## What's Included
 
-Use search_nodes with query="vector database" to find vector stores
-```
+- **311 Flowise nodes** with full schemas
+- **1,915 input parameters** documented
+- **26 node categories** (Chat Models, Vector Stores, Tools, etc.)
+- **64 marketplace templates** as examples
+- **SQLite database** for fast queries
 
-### Build a RAG Chatbot
+## Updating the Node Database
 
-```
-1. Use get_template with name="Conversational Retrieval QA Chain" for an example
-2. Use get_node_schema for each node you want to use
-3. Use find_compatible_nodes to see what connects where
-4. Use validate_flow to check your flow before deploying
-```
-
-### Generate a Flow Skeleton
-
-```
-Use generate_flow_skeleton with use_case="rag_chatbot"
-
-Supported use cases:
-- simple_chatbot
-- rag_chatbot
-- conversational_agent
-- document_qa
-- api_agent
-- multi_agent
-```
-
-## Resources
-
-The server also exposes resources for bulk access:
-
-- `flowise://categories` - All categories
-- `flowise://nodes` - All nodes
-- `flowise://templates` - All templates
-
-## Database Schema
-
-The SQLite database contains:
-
-- **nodes** - All Flowise node definitions
-- **node_inputs** - Input parameters for each node
-- **categories** - Node categories with counts
-- **templates** - Marketplace templates
-- **nodes_fts** - Full-text search index for nodes
-- **templates_fts** - Full-text search index for templates
-
-## Development
+To update with the latest Flowise nodes:
 
 ```bash
-# Run in development mode
-npm run dev
+git clone https://github.com/dtsoden/DS-MCP-FLOWISE.git
+cd DS-MCP-FLOWISE
+npm install
 
-# Extract nodes from Flowise source
+# This clones Flowise and extracts all node definitions
 npm run extract
 
-# Prepare SQLite database
+# This rebuilds the SQLite database
 npm run prepare-db
 
-# Build for production
 npm run build
 ```
 
-## How It Works
-
-1. **Extraction**: Parses Flowise source code to extract all node definitions
-2. **Database**: Stores nodes, inputs, and templates in SQLite for fast queries
-3. **MCP Server**: Exposes tools and resources via Model Context Protocol
-4. **AI Integration**: Claude/GPT can query nodes, search, and validate flows
-
 ## Credits
 
-- [Flowise](https://github.com/FlowiseAI/Flowise) - The amazing no-code LLM orchestration platform
+- [Flowise](https://github.com/FlowiseAI/Flowise) - The no-code LLM orchestration platform
 - Inspired by [n8n-mcp](https://github.com/czlonkowski/n8n-mcp) architecture
 
 ## License
