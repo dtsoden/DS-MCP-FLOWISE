@@ -99,6 +99,134 @@ function queryOne(sql: string, params: any[] = []): any | null {
   return results.length > 0 ? results[0] : null;
 }
 
+// Load nodes data for edge generation
+let nodesData: any[] = [];
+
+function loadNodesData() {
+  const possiblePaths = [
+    path.join(__dirname, '..', 'data', 'nodes.json'),
+    path.join(__dirname, '..', '..', 'data', 'nodes.json'),
+    path.join(process.cwd(), 'data', 'nodes.json'),
+  ];
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      nodesData = JSON.parse(fs.readFileSync(p, 'utf-8'));
+      return;
+    }
+  }
+}
+
+// Get node info from loaded data
+function getNodeInfo(nodeName: string): any | null {
+  return nodesData.find(n => n.name === nodeName || n.name.toLowerCase() === nodeName.toLowerCase());
+}
+
+// Create a proper Flowise edge with all required fields
+function createFlowiseEdge(
+  sourceNodeId: string,
+  sourceNodeType: string,
+  targetNodeId: string,
+  targetNodeType: string,
+  targetInputName: string
+): any {
+  const sourceNode = getNodeInfo(sourceNodeType);
+  const targetNode = getNodeInfo(targetNodeType);
+
+  if (!sourceNode || !targetNode) {
+    // Fallback to simple edge if node info not found
+    return {
+      source: sourceNodeId,
+      target: targetNodeId,
+      type: 'buttonedge',
+      id: `${sourceNodeId}-${targetNodeId}`,
+      data: { label: '' }
+    };
+  }
+
+  // Get source output info (baseClasses)
+  const sourceBaseClasses = sourceNode.baseClasses || [sourceNode.name];
+  const sourceHandle = `${sourceNodeId}-output-${sourceNodeType}-${sourceBaseClasses.join('|')}`;
+
+  // Get target input info
+  const targetInput = targetNode.inputs?.find((i: any) => i.name === targetInputName);
+  const targetType = targetInput?.type || sourceBaseClasses[0];
+  const targetHandle = `${targetNodeId}-input-${targetInputName}-${targetType}`;
+
+  const edgeId = `${sourceHandle}-${targetHandle}`;
+
+  return {
+    source: sourceNodeId,
+    sourceHandle,
+    target: targetNodeId,
+    targetHandle,
+    type: 'buttonedge',
+    id: edgeId,
+    data: { label: '' }
+  };
+}
+
+// Create a proper Flowise node with all required fields
+function createFlowiseNode(
+  id: string,
+  nodeType: string,
+  position: { x: number; y: number },
+  inputValues: Record<string, any> = {}
+): any {
+  const nodeInfo = getNodeInfo(nodeType);
+
+  if (!nodeInfo) {
+    // Fallback to basic node
+    return {
+      id,
+      position,
+      type: 'customNode',
+      data: {
+        id,
+        label: nodeType,
+        name: nodeType,
+        type: nodeType,
+        inputs: inputValues,
+        outputs: {}
+      }
+    };
+  }
+
+  // Build the data object with proper structure
+  const data: any = {
+    id,
+    label: nodeInfo.label || nodeType,
+    name: nodeInfo.name,
+    type: nodeInfo.name,
+    baseClasses: nodeInfo.baseClasses || [],
+    category: nodeInfo.category || '',
+    description: nodeInfo.description || '',
+    inputs: {},
+    outputs: {},
+    inputParams: nodeInfo.inputs || [],
+    inputAnchors: [],
+    outputAnchors: []
+  };
+
+  // Set input values
+  for (const input of (nodeInfo.inputs || [])) {
+    if (inputValues[input.name] !== undefined) {
+      data.inputs[input.name] = inputValues[input.name];
+    } else if (input.default !== undefined) {
+      data.inputs[input.name] = input.default;
+    } else {
+      data.inputs[input.name] = '';
+    }
+  }
+
+  return {
+    id,
+    position,
+    type: 'customNode',
+    data
+  };
+}
+
 // === FLOWISE API HELPERS ===
 
 async function flowiseApiRequest(
@@ -636,7 +764,12 @@ function validateFlow(nodes: any[], edges: any[]): string {
 function generateFlowSkeleton(useCase: string, chatModel?: string): string {
   const model = chatModel || 'chatOpenAI';
 
-  const skeletons: Record<string, any> = {
+  // Define skeleton blueprints with connection info (sourceId, sourceType, targetId, targetType, targetInputName)
+  const blueprints: Record<string, {
+    description: string;
+    nodes: Array<{ id: string; type: string; position: { x: number; y: number }; inputs?: Record<string, any> }>;
+    connections: Array<{ sourceId: string; sourceType: string; targetId: string; targetType: string; targetInput: string }>;
+  }> = {
     simple_chatbot: {
       description: 'A basic chatbot with memory',
       nodes: [
@@ -644,9 +777,9 @@ function generateFlowSkeleton(useCase: string, chatModel?: string): string {
         { id: 'memory_0', type: 'bufferMemory', position: { x: 100, y: 400 } },
         { id: 'chain_0', type: 'conversationChain', position: { x: 400, y: 300 } },
       ],
-      edges: [
-        { source: 'chatModel_0', target: 'chain_0' },
-        { source: 'memory_0', target: 'chain_0' },
+      connections: [
+        { sourceId: 'chatModel_0', sourceType: model, targetId: 'chain_0', targetType: 'conversationChain', targetInput: 'model' },
+        { sourceId: 'memory_0', sourceType: 'bufferMemory', targetId: 'chain_0', targetType: 'conversationChain', targetInput: 'memory' },
       ],
     },
     rag_chatbot: {
@@ -659,12 +792,12 @@ function generateFlowSkeleton(useCase: string, chatModel?: string): string {
         { id: 'memory_0', type: 'bufferMemory', position: { x: 400, y: 500 } },
         { id: 'chain_0', type: 'conversationalRetrievalQAChain', position: { x: 1000, y: 300 } },
       ],
-      edges: [
-        { source: 'chatModel_0', target: 'chain_0' },
-        { source: 'embeddings_0', target: 'vectorStore_0' },
-        { source: 'vectorStore_0', target: 'retriever_0' },
-        { source: 'retriever_0', target: 'chain_0' },
-        { source: 'memory_0', target: 'chain_0' },
+      connections: [
+        { sourceId: 'chatModel_0', sourceType: model, targetId: 'chain_0', targetType: 'conversationalRetrievalQAChain', targetInput: 'model' },
+        { sourceId: 'embeddings_0', sourceType: 'openAIEmbeddings', targetId: 'vectorStore_0', targetType: 'pinecone', targetInput: 'embeddings' },
+        { sourceId: 'vectorStore_0', sourceType: 'pinecone', targetId: 'retriever_0', targetType: 'vectorStoreRetriever', targetInput: 'vectorStore' },
+        { sourceId: 'retriever_0', sourceType: 'vectorStoreRetriever', targetId: 'chain_0', targetType: 'conversationalRetrievalQAChain', targetInput: 'vectorStoreRetriever' },
+        { sourceId: 'memory_0', sourceType: 'bufferMemory', targetId: 'chain_0', targetType: 'conversationalRetrievalQAChain', targetInput: 'memory' },
       ],
     },
     conversational_agent: {
@@ -673,14 +806,14 @@ function generateFlowSkeleton(useCase: string, chatModel?: string): string {
         { id: 'chatModel_0', type: model, position: { x: 100, y: 200 } },
         { id: 'memory_0', type: 'bufferMemory', position: { x: 100, y: 400 } },
         { id: 'tool_0', type: 'calculator', position: { x: 400, y: 100 } },
-        { id: 'tool_1', type: 'searchApi', position: { x: 400, y: 300 } },
+        { id: 'tool_1', type: 'serpAPI', position: { x: 400, y: 300 } },
         { id: 'agent_0', type: 'conversationalAgent', position: { x: 700, y: 200 } },
       ],
-      edges: [
-        { source: 'chatModel_0', target: 'agent_0' },
-        { source: 'memory_0', target: 'agent_0' },
-        { source: 'tool_0', target: 'agent_0' },
-        { source: 'tool_1', target: 'agent_0' },
+      connections: [
+        { sourceId: 'chatModel_0', sourceType: model, targetId: 'agent_0', targetType: 'conversationalAgent', targetInput: 'model' },
+        { sourceId: 'memory_0', sourceType: 'bufferMemory', targetId: 'agent_0', targetType: 'conversationalAgent', targetInput: 'memory' },
+        { sourceId: 'tool_0', sourceType: 'calculator', targetId: 'agent_0', targetType: 'conversationalAgent', targetInput: 'tools' },
+        { sourceId: 'tool_1', sourceType: 'serpAPI', targetId: 'agent_0', targetType: 'conversationalAgent', targetInput: 'tools' },
       ],
     },
     document_qa: {
@@ -693,12 +826,12 @@ function generateFlowSkeleton(useCase: string, chatModel?: string): string {
         { id: 'vectorStore_0', type: 'memoryVectorStore', position: { x: 400, y: 300 } },
         { id: 'chain_0', type: 'retrievalQAChain', position: { x: 700, y: 300 } },
       ],
-      edges: [
-        { source: 'chatModel_0', target: 'chain_0' },
-        { source: 'embeddings_0', target: 'vectorStore_0' },
-        { source: 'docLoader_0', target: 'textSplitter_0' },
-        { source: 'textSplitter_0', target: 'vectorStore_0' },
-        { source: 'vectorStore_0', target: 'chain_0' },
+      connections: [
+        { sourceId: 'chatModel_0', sourceType: model, targetId: 'chain_0', targetType: 'retrievalQAChain', targetInput: 'model' },
+        { sourceId: 'embeddings_0', sourceType: 'openAIEmbeddings', targetId: 'vectorStore_0', targetType: 'memoryVectorStore', targetInput: 'embeddings' },
+        { sourceId: 'docLoader_0', sourceType: 'pdfFile', targetId: 'textSplitter_0', targetType: 'recursiveCharacterTextSplitter', targetInput: 'document' },
+        { sourceId: 'textSplitter_0', sourceType: 'recursiveCharacterTextSplitter', targetId: 'vectorStore_0', targetType: 'memoryVectorStore', targetInput: 'document' },
+        { sourceId: 'vectorStore_0', sourceType: 'memoryVectorStore', targetId: 'chain_0', targetType: 'retrievalQAChain', targetInput: 'vectorStoreRetriever' },
       ],
     },
     api_agent: {
@@ -709,10 +842,10 @@ function generateFlowSkeleton(useCase: string, chatModel?: string): string {
         { id: 'tool_1', type: 'requestsGet', position: { x: 400, y: 300 } },
         { id: 'agent_0', type: 'openAIFunctionAgent', position: { x: 700, y: 200 } },
       ],
-      edges: [
-        { source: 'chatModel_0', target: 'agent_0' },
-        { source: 'tool_0', target: 'agent_0' },
-        { source: 'tool_1', target: 'agent_0' },
+      connections: [
+        { sourceId: 'chatModel_0', sourceType: model, targetId: 'agent_0', targetType: 'openAIFunctionAgent', targetInput: 'model' },
+        { sourceId: 'tool_0', sourceType: 'customTool', targetId: 'agent_0', targetType: 'openAIFunctionAgent', targetInput: 'tools' },
+        { sourceId: 'tool_1', sourceType: 'requestsGet', targetId: 'agent_0', targetType: 'openAIFunctionAgent', targetInput: 'tools' },
       ],
     },
     multi_agent: {
@@ -723,20 +856,32 @@ function generateFlowSkeleton(useCase: string, chatModel?: string): string {
         { id: 'worker_0', type: 'worker', position: { x: 700, y: 100 } },
         { id: 'worker_1', type: 'worker', position: { x: 700, y: 300 } },
       ],
-      edges: [
-        { source: 'chatModel_0', target: 'supervisor_0' },
-        { source: 'supervisor_0', target: 'worker_0' },
-        { source: 'supervisor_0', target: 'worker_1' },
+      connections: [
+        { sourceId: 'chatModel_0', sourceType: model, targetId: 'supervisor_0', targetType: 'supervisor', targetInput: 'model' },
+        { sourceId: 'supervisor_0', sourceType: 'supervisor', targetId: 'worker_0', targetType: 'worker', targetInput: 'supervisor' },
+        { sourceId: 'supervisor_0', sourceType: 'supervisor', targetId: 'worker_1', targetType: 'worker', targetInput: 'supervisor' },
       ],
     },
   };
 
-  const skeleton = skeletons[useCase];
-  if (!skeleton) {
-    return JSON.stringify({ error: `Unknown use case: ${useCase}` });
+  const blueprint = blueprints[useCase];
+  if (!blueprint) {
+    return JSON.stringify({ error: `Unknown use case: ${useCase}. Available: ${Object.keys(blueprints).join(', ')}` });
   }
 
-  return JSON.stringify(skeleton, null, 2);
+  // Generate proper Flowise nodes
+  const nodes = blueprint.nodes.map(n => createFlowiseNode(n.id, n.type, n.position, n.inputs || {}));
+
+  // Generate proper Flowise edges with full handle info
+  const edges = blueprint.connections.map(c =>
+    createFlowiseEdge(c.sourceId, c.sourceType, c.targetId, c.targetType, c.targetInput)
+  );
+
+  return JSON.stringify({
+    description: blueprint.description,
+    nodes,
+    edges,
+  }, null, 2);
 }
 
 // === FLOWISE API IMPLEMENTATIONS ===
@@ -1062,8 +1207,12 @@ async function main() {
   const dbBuffer = fs.readFileSync(dbPath);
   db = new SQL.Database(dbBuffer);
 
+  // Load nodes data for edge generation
+  loadNodesData();
+
   console.error('DS-MCP-FLOWISE server started');
   console.error(`Database loaded from: ${dbPath}`);
+  console.error(`Nodes data loaded: ${nodesData.length} nodes`);
 
   if (FLOWISE_API_URL) {
     console.error(`Flowise API configured: ${FLOWISE_API_URL}`);
