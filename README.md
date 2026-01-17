@@ -254,3 +254,6 @@ npm run build
 ## License
 
 MIT
+
+---
+*Auto-published to npm via GitHub Actions*

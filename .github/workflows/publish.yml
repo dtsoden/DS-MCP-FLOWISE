@@ -9,6 +9,7 @@ on:
       - 'README.md'
       - 'src/**'
       - 'data/**'
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
   publish:
