@@ -1,9 +1,16 @@
 {
   "name": "ds-mcp-flowise",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "MCP server for building and managing Flowise chatflows and agentflows. Provides AI assistants with comprehensive knowledge of Flowise nodes, tools for workflow creation, and direct API integration to deploy chatflows.",
   "main": "dist/index.js",
   "type": "module",
+  "files": [
+    "dist",
+    "data",
+    "scripts",
+    "src",
+    "README.md"
+  ],
   "bin": {
     "ds-mcp-flowise": "./dist/index.js"
   },
