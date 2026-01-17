@@ -231,6 +231,12 @@ The key is to include phrases like:
 - "with the flowise MCP"
 - "use flowise search"
 
+**Pro tip for proper edge connections:** Ask Claude to look at a template first to understand the edge format:
+
+> "Use flowise tools to get a template for a simple chatbot, then use that as a reference to build me a chatflow with Ollama"
+
+Templates contain properly formatted edges with `sourceHandle`, `targetHandle`, and `type: "buttonedge"` that Flowise requires.
+
 ## What's Included
 
 - **311 Flowise nodes** with full schemas
