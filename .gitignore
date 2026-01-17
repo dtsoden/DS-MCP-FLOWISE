@@ -11,6 +11,9 @@ flowise-source/
 .env
 .env.local
 
+# NPM token (NEVER commit this)
+.npmrc
+
 # IDE
 .vscode/
 .idea/
