@@ -180,50 +180,101 @@ function createFlowiseNode(
     return {
       id,
       position,
+      width: 300,
+      height: 400,
       type: 'customNode',
       data: {
         id,
         label: nodeType,
+        version: 1,
         name: nodeType,
         type: nodeType,
+        baseClasses: [],
         inputs: inputValues,
-        outputs: {}
+        outputs: {},
+        inputParams: [],
+        inputAnchors: [],
+        outputAnchors: []
       }
     };
   }
 
-  // Build the data object with proper structure
+  // Separate inputs into params (string/number/boolean) and anchors (node connections)
+  const inputParams: any[] = [];
+  const inputAnchors: any[] = [];
+  const inputs: Record<string, any> = {};
+
+  for (const input of (nodeInfo.inputs || [])) {
+    const isAnchor = !['string', 'number', 'boolean', 'password', 'options', 'json', 'code'].includes(input.type);
+
+    if (isAnchor) {
+      // This is a connection anchor
+      inputAnchors.push({
+        label: input.label || input.name,
+        name: input.name,
+        type: input.type,
+        optional: input.optional || false,
+        list: input.list || false,
+        id: `${id}-input-${input.name}-${input.type}`
+      });
+      inputs[input.name] = inputValues[input.name] || '';
+    } else {
+      // This is a parameter
+      inputParams.push({
+        label: input.label || input.name,
+        name: input.name,
+        type: input.type,
+        optional: input.optional || false,
+        default: input.default,
+        placeholder: input.placeholder || '',
+        id: `${id}-input-${input.name}-${input.type}`
+      });
+      inputs[input.name] = inputValues[input.name] !== undefined
+        ? inputValues[input.name]
+        : (input.default !== undefined ? input.default : '');
+    }
+  }
+
+  // Build output anchors from baseClasses
+  const baseClasses = nodeInfo.baseClasses || [nodeInfo.name];
+  const outputAnchors: any[] = [{
+    name: 'output',
+    label: 'Output',
+    type: 'options',
+    options: [{
+      id: `${id}-output-${nodeInfo.name}-${baseClasses.join('|')}`,
+      name: nodeInfo.name,
+      label: nodeInfo.label || nodeInfo.name,
+      type: baseClasses.join(' | ')
+    }],
+    default: nodeInfo.name
+  }];
+
   const data: any = {
     id,
     label: nodeInfo.label || nodeType,
+    version: nodeInfo.version || 1,
     name: nodeInfo.name,
     type: nodeInfo.name,
-    baseClasses: nodeInfo.baseClasses || [],
+    baseClasses,
     category: nodeInfo.category || '',
     description: nodeInfo.description || '',
-    inputs: {},
-    outputs: {},
-    inputParams: nodeInfo.inputs || [],
-    inputAnchors: [],
-    outputAnchors: []
+    inputParams,
+    inputAnchors,
+    inputs,
+    outputAnchors,
+    outputs: { output: nodeInfo.name },
+    selected: false
   };
-
-  // Set input values
-  for (const input of (nodeInfo.inputs || [])) {
-    if (inputValues[input.name] !== undefined) {
-      data.inputs[input.name] = inputValues[input.name];
-    } else if (input.default !== undefined) {
-      data.inputs[input.name] = input.default;
-    } else {
-      data.inputs[input.name] = '';
-    }
-  }
 
   return {
     id,
     position,
+    width: 300,
+    height: Math.max(300, 150 + (inputParams.length + inputAnchors.length) * 50),
     type: 'customNode',
-    data
+    data,
+    selected: false
   };
 }
 
