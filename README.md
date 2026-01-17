@@ -1,6 +1,6 @@
 # DS-MCP-FLOWISE
 
-MCP (Model Context Protocol) server that gives AI assistants (Claude, GPT, etc.) deep knowledge of [Flowise](https://flowiseai.com/) nodes so they can help you design and build chatflows and agentflows.
+MCP (Model Context Protocol) server that gives AI assistants (Claude, GPT, etc.) deep knowledge of [Flowise](https://flowiseai.com/) nodes so they can help you design, build, and deploy chatflows and agentflows.
 
 ## What This Does
 
@@ -9,6 +9,7 @@ When connected to Claude Code (or other MCP clients), this server lets the AI:
 - Understand how nodes connect together
 - Design complete flows based on your requirements
 - Output valid JSON you can import into Flowise
+- **Deploy flows directly to your Flowise instance** (optional API integration)
 
 ## Quick Start
 
@@ -51,6 +52,41 @@ Claude will use the MCP tools to:
 4. Paste the JSON Claude gave you
 5. Configure credentials (API keys) for each node
 6. Save and test
+
+## Flowise API Integration (Optional)
+
+Instead of manually importing JSON, you can connect directly to your Flowise instance to create, update, and manage chatflows via the API.
+
+### Setup
+
+1. Create a `.env` file in the project root (or in your working directory):
+
+```bash
+FLOWISE_API_URL=https://your-flowise-instance.com
+FLOWISE_API_KEY=your-api-key-here
+```
+
+2. Get your API key from Flowise:
+   - Open your Flowise instance
+   - Go to **Settings** → **API Keys**
+   - Create a new API key or copy an existing one
+
+3. The MCP server will automatically load credentials from `.env` when it starts.
+
+### Usage
+
+Once configured, you can ask Claude:
+
+- "Test the connection to my Flowise instance"
+- "List all my chatflows"
+- "Create a new chatflow with this design and deploy it"
+- "Update the existing chatflow with these changes"
+
+### Security Notes
+
+- Never commit your `.env` file to version control
+- The `.env` file is already in `.gitignore`
+- API keys should be kept private and rotated periodically
 
 ## Alternative Installation Methods
 
@@ -117,6 +153,19 @@ Then in your MCP config:
 |------|-------------|
 | `validate_flow` | Validate a flow's nodes and connections |
 | `generate_flow_skeleton` | Generate a starting flow for common use cases |
+
+### Flowise API (requires .env configuration)
+
+| Tool | Description |
+|------|-------------|
+| `flowise_test_connection` | Test connection to your Flowise instance |
+| `flowise_list_chatflows` | List all chatflows in your instance |
+| `flowise_get_chatflow` | Get details of a specific chatflow |
+| `flowise_create_chatflow` | Create and deploy a new chatflow |
+| `flowise_update_chatflow` | Update an existing chatflow |
+| `flowise_delete_chatflow` | Delete a chatflow |
+
+> **Note:** The Flowise API currently only supports **chatflows**. Agentflows must be created through the Flowise UI by importing the generated JSON.
 
 ## Example Prompts
 

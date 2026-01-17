@@ -25,6 +25,38 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load .env file if it exists
+function loadEnv() {
+  const envPaths = [
+    path.join(process.cwd(), '.env'),
+    path.join(__dirname, '..', '.env'),
+    path.join(__dirname, '..', '..', '.env'),
+  ];
+
+  for (const envPath of envPaths) {
+    if (fs.existsSync(envPath)) {
+      const envContent = fs.readFileSync(envPath, 'utf-8');
+      for (const line of envContent.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#')) {
+          const [key, ...valueParts] = trimmed.split('=');
+          const value = valueParts.join('=');
+          if (key && value) {
+            process.env[key.trim()] = value.trim();
+          }
+        }
+      }
+      break;
+    }
+  }
+}
+
+loadEnv();
+
+// Flowise API configuration
+const FLOWISE_API_URL = process.env.FLOWISE_API_URL || '';
+const FLOWISE_API_KEY = process.env.FLOWISE_API_KEY || '';
+
 // Find database path
 function findDatabasePath(): string {
   const possiblePaths = [
@@ -67,11 +99,46 @@ function queryOne(sql: string, params: any[] = []): any | null {
   return results.length > 0 ? results[0] : null;
 }
 
+// === FLOWISE API HELPERS ===
+
+async function flowiseApiRequest(
+  endpoint: string,
+  method: string = 'GET',
+  body?: any
+): Promise<any> {
+  if (!FLOWISE_API_URL) {
+    throw new Error('FLOWISE_API_URL not configured. Set it in .env file.');
+  }
+
+  const url = `${FLOWISE_API_URL.replace(/\/$/, '')}/api/v1${endpoint}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (FLOWISE_API_KEY) {
+    headers['Authorization'] = `Bearer ${FLOWISE_API_KEY}`;
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Flowise API error (${response.status}): ${errorText}`);
+  }
+
+  return response.json();
+}
+
 // Create MCP server
 const server = new Server(
   {
     name: 'ds-mcp-flowise',
-    version: '1.0.0',
+    version: '1.1.0',
   },
   {
     capabilities: {
@@ -85,6 +152,7 @@ const server = new Server(
 // === TOOL DEFINITIONS ===
 
 const TOOLS = [
+  // Node discovery tools
   {
     name: 'list_categories',
     description: 'List all available Flowise node categories with node counts',
@@ -246,6 +314,114 @@ const TOOLS = [
       required: ['use_case'],
     },
   },
+
+  // Flowise API tools
+  {
+    name: 'flowise_list_chatflows',
+    description: 'List all chatflows in the connected Flowise instance. Requires FLOWISE_API_URL and FLOWISE_API_KEY to be configured.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'flowise_get_chatflow',
+    description: 'Get details of a specific chatflow by ID from the connected Flowise instance.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The chatflow ID',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'flowise_create_chatflow',
+    description: 'Create a new chatflow in the connected Flowise instance. This pushes your designed flow directly to Flowise.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Name for the chatflow',
+        },
+        nodes: {
+          type: 'array',
+          description: 'Array of node objects',
+          items: { type: 'object' },
+        },
+        edges: {
+          type: 'array',
+          description: 'Array of edge objects',
+          items: { type: 'object' },
+        },
+        deployed: {
+          type: 'boolean',
+          description: 'Whether to deploy immediately (default: false)',
+        },
+      },
+      required: ['name', 'nodes', 'edges'],
+    },
+  },
+  {
+    name: 'flowise_update_chatflow',
+    description: 'Update an existing chatflow in the connected Flowise instance.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The chatflow ID to update',
+        },
+        name: {
+          type: 'string',
+          description: 'New name for the chatflow (optional)',
+        },
+        nodes: {
+          type: 'array',
+          description: 'Updated array of node objects',
+          items: { type: 'object' },
+        },
+        edges: {
+          type: 'array',
+          description: 'Updated array of edge objects',
+          items: { type: 'object' },
+        },
+        deployed: {
+          type: 'boolean',
+          description: 'Whether the chatflow should be deployed',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'flowise_delete_chatflow',
+    description: 'Delete a chatflow from the connected Flowise instance. Use with caution!',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The chatflow ID to delete',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'flowise_test_connection',
+    description: 'Test the connection to the configured Flowise instance. Use this to verify your API URL and key are correct.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // === TOOL IMPLEMENTATIONS ===
@@ -300,7 +476,6 @@ function getNodeSchema(name: string): string {
     ORDER BY additional_params, input_label
   `, [name]);
 
-  // Parse JSON fields
   const schema = {
     ...node,
     base_classes: JSON.parse(node.base_classes || '[]'),
@@ -387,11 +562,9 @@ function findCompatibleNodes(nodeName: string, direction: string = 'inputs'): st
   const baseClasses = JSON.parse(node.base_classes || '[]') as string[];
 
   if (direction === 'inputs') {
-    // Find nodes whose outputs (base_classes) match this node's input types
     const inputs = query(`SELECT input_type FROM node_inputs WHERE node_name = ?`, [nodeName]);
     const inputTypes = inputs.map((i: any) => i.input_type);
 
-    // Find nodes that have these types in their base_classes
     const allNodes = query(`SELECT name, label, category, base_classes FROM nodes`);
 
     const compatible = allNodes.filter((n: any) => {
@@ -405,7 +578,6 @@ function findCompatibleNodes(nodeName: string, direction: string = 'inputs'): st
 
     return JSON.stringify({ compatible_inputs: compatible }, null, 2);
   } else {
-    // Find nodes that accept this node's output types
     const allInputs = query(`
       SELECT DISTINCT n.name, n.label, n.category, ni.input_type
       FROM nodes n
@@ -420,7 +592,6 @@ function findCompatibleNodes(nodeName: string, direction: string = 'inputs'): st
       category: i.category,
     }));
 
-    // Deduplicate
     const unique = Array.from(new Map(compatible.map((c: any) => [c.name, c])).values());
 
     return JSON.stringify({ compatible_outputs: unique }, null, 2);
@@ -431,7 +602,6 @@ function validateFlow(nodes: any[], edges: any[]): string {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Check all nodes exist
   const nodeNames = new Set<string>();
   for (const node of nodes) {
     const nodeName = node.data?.name || node.type || node.name;
@@ -447,7 +617,6 @@ function validateFlow(nodes: any[], edges: any[]): string {
     nodeNames.add(node.id);
   }
 
-  // Check all edges reference valid nodes
   for (const edge of edges) {
     if (!nodeNames.has(edge.source)) {
       errors.push(`Edge references non-existent source node: ${edge.source}`);
@@ -570,6 +739,106 @@ function generateFlowSkeleton(useCase: string, chatModel?: string): string {
   return JSON.stringify(skeleton, null, 2);
 }
 
+// === FLOWISE API IMPLEMENTATIONS ===
+
+async function flowiseTestConnection(): Promise<string> {
+  if (!FLOWISE_API_URL) {
+    return JSON.stringify({
+      connected: false,
+      error: 'FLOWISE_API_URL not configured. Create a .env file with FLOWISE_API_URL and FLOWISE_API_KEY.',
+    });
+  }
+
+  try {
+    const chatflows = await flowiseApiRequest('/chatflows');
+    return JSON.stringify({
+      connected: true,
+      url: FLOWISE_API_URL,
+      chatflows_count: Array.isArray(chatflows) ? chatflows.length : 0,
+    }, null, 2);
+  } catch (error) {
+    return JSON.stringify({
+      connected: false,
+      url: FLOWISE_API_URL,
+      error: String(error),
+    }, null, 2);
+  }
+}
+
+async function flowiseListChatflows(): Promise<string> {
+  const chatflows = await flowiseApiRequest('/chatflows');
+
+  // Return summary info for each chatflow
+  const summary = chatflows.map((cf: any) => ({
+    id: cf.id,
+    name: cf.name,
+    deployed: cf.deployed,
+    createdDate: cf.createdDate,
+    updatedDate: cf.updatedDate,
+  }));
+
+  return JSON.stringify(summary, null, 2);
+}
+
+async function flowiseGetChatflow(id: string): Promise<string> {
+  const chatflow = await flowiseApiRequest(`/chatflows/${id}`);
+  return JSON.stringify(chatflow, null, 2);
+}
+
+async function flowiseCreateChatflow(
+  name: string,
+  nodes: any[],
+  edges: any[],
+  deployed: boolean = false
+): Promise<string> {
+  const flowData = {
+    name,
+    flowData: JSON.stringify({ nodes, edges }),
+    deployed,
+  };
+
+  const result = await flowiseApiRequest('/chatflows', 'POST', flowData);
+  return JSON.stringify({
+    success: true,
+    id: result.id,
+    name: result.name,
+    message: `Chatflow "${name}" created successfully!`,
+    url: `${FLOWISE_API_URL}/chatflows/${result.id}`,
+  }, null, 2);
+}
+
+async function flowiseUpdateChatflow(
+  id: string,
+  name?: string,
+  nodes?: any[],
+  edges?: any[],
+  deployed?: boolean
+): Promise<string> {
+  const updateData: any = {};
+
+  if (name) updateData.name = name;
+  if (nodes && edges) {
+    updateData.flowData = JSON.stringify({ nodes, edges });
+  }
+  if (deployed !== undefined) updateData.deployed = deployed;
+
+  const result = await flowiseApiRequest(`/chatflows/${id}`, 'PUT', updateData);
+  return JSON.stringify({
+    success: true,
+    id: result.id,
+    name: result.name,
+    message: `Chatflow updated successfully!`,
+  }, null, 2);
+}
+
+async function flowiseDeleteChatflow(id: string): Promise<string> {
+  await flowiseApiRequest(`/chatflows/${id}`, 'DELETE');
+  return JSON.stringify({
+    success: true,
+    message: `Chatflow ${id} deleted successfully!`,
+  }, null, 2);
+}
+
 // === REQUEST HANDLERS ===
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -583,6 +852,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let result: string;
 
     switch (name) {
+      // Node discovery tools
       case 'list_categories':
         result = listCategories();
         break;
@@ -610,6 +880,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'generate_flow_skeleton':
         result = generateFlowSkeleton(args?.use_case as string, args?.chat_model as string);
         break;
+
+      // Flowise API tools
+      case 'flowise_test_connection':
+        result = await flowiseTestConnection();
+        break;
+      case 'flowise_list_chatflows':
+        result = await flowiseListChatflows();
+        break;
+      case 'flowise_get_chatflow':
+        result = await flowiseGetChatflow(args?.id as string);
+        break;
+      case 'flowise_create_chatflow':
+        result = await flowiseCreateChatflow(
+          args?.name as string,
+          args?.nodes as any[],
+          args?.edges as any[],
+          args?.deployed as boolean
+        );
+        break;
+      case 'flowise_update_chatflow':
+        result = await flowiseUpdateChatflow(
+          args?.id as string,
+          args?.name as string,
+          args?.nodes as any[],
+          args?.edges as any[],
+          args?.deployed as boolean
+        );
+        break;
+      case 'flowise_delete_chatflow':
+        result = await flowiseDeleteChatflow(args?.id as string);
+        break;
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -719,7 +1021,8 @@ First, use list_categories to see available node types.
 Then, use search_nodes or list_nodes to find relevant components.
 Use get_node_schema to understand how to configure each node.
 Check list_templates for similar examples.
-Finally, use validate_flow to verify the flow is valid.`,
+Use validate_flow to verify the flow is valid.
+Finally, use flowise_create_chatflow to push it directly to Flowise!`,
           },
         },
       ],
@@ -739,7 +1042,8 @@ Agent flows use nodes from the "Agent Flows" category.
 Use list_nodes with category="Agent Flows" to see available nodes.
 Use list_templates with type="agentflowv2" for examples.
 Key nodes include: startAgentflow, agentAgentflow, llmAgentflow, toolAgentflow, conditionAgentflow.
-Use get_node_schema to understand each node's configuration.`,
+Use get_node_schema to understand each node's configuration.
+Finally, use flowise_create_chatflow to push it directly to Flowise!`,
           },
         },
       ],
@@ -760,6 +1064,12 @@ async function main() {
 
   console.error('DS-MCP-FLOWISE server started');
   console.error(`Database loaded from: ${dbPath}`);
+
+  if (FLOWISE_API_URL) {
+    console.error(`Flowise API configured: ${FLOWISE_API_URL}`);
+  } else {
+    console.error('Flowise API not configured (set FLOWISE_API_URL in .env for direct flow creation)');
+  }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
