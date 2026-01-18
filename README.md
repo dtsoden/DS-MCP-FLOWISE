@@ -305,10 +305,6 @@ All previously reported issues have been fixed in version 1.2.0:
 
 ## Troubleshooting
 
-**"Invalid Chatflow Type" error when creating flows**
-- This is a known issue with the `flowise_create_chatflow` tool
-- Workaround: Create a blank chatflow in Flowise UI first, then use `flowise_update_chatflow`
-
 **Connection test fails**
 - Verify your `FLOWISE_API_URL` is correct and accessible
 - Ensure your API key is valid and has the right permissions
