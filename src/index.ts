@@ -337,6 +337,16 @@ const server = new Server(
 // === TOOL DEFINITIONS ===
 
 const TOOLS = [
+  // MUST READ FIRST - Usage guide for AI assistants
+  {
+    name: 'get_usage_guide',
+    description: 'IMPORTANT: Call this FIRST before using other tools. Returns instructions on how to properly use the Flowise MCP server to build valid chatflows.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
   // Node discovery tools
   {
     name: 'list_categories',
@@ -1062,6 +1072,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let result: string;
 
     switch (name) {
+      // Usage guide - MUST READ FIRST
+      case 'get_usage_guide':
+        result = JSON.stringify({
+          title: 'Flowise MCP Server - Usage Guide',
+          important: 'READ THIS BEFORE USING OTHER TOOLS',
+          workflow: [
+            '1. Call get_usage_guide (this tool) - understand how to use the server',
+            '2. Call list_templates to find a similar flow as your starting point',
+            '3. Call get_template to get the EXACT structure of a working flow',
+            '4. Call search_nodes or get_node_schema to find nodes you need to swap in',
+            '5. Call validate_flow to verify your flow before creating',
+            '6. Call flowise_create_chatflow to deploy',
+          ],
+          critical_rules: [
+            'NEVER invent your own node structure - ALWAYS use templates as the source of truth',
+            'The skeleton from generate_flow_skeleton or get_template is the EXACT format required',
+            'Do NOT simplify, reorganize, or rewrite the node structure',
+            'Only change: node name/type, and values in the "inputs" object',
+            'Keep ALL properties: id, position, type, data, width, height, etc.',
+            'Keep the data structure: inputParams, inputAnchors, outputAnchors, inputs',
+            'Edges define connections - copy the format exactly from templates',
+          ],
+          common_mistakes: [
+            'Creating nodes from scratch instead of using template structure',
+            'Removing required properties like inputAnchors or outputAnchors',
+            'Changing the nested data structure',
+            'Not including position, width, height on nodes',
+            'Making up edge formats instead of copying from templates',
+          ],
+          example_workflow: {
+            task: 'Build a RAG chatbot with Postgres instead of Pinecone',
+            steps: [
+              '1. get_template("Simple Conversational Chain") - get a working RAG flow',
+              '2. get_node_schema("postgres") - understand the Postgres node inputs',
+              '3. In the template, find the vector store node and replace its name/type with postgres',
+              '4. Update only the "inputs" values for Postgres-specific config',
+              '5. validate_flow with your modified nodes and edges',
+              '6. flowise_create_chatflow to deploy',
+            ],
+          },
+        }, null, 2);
+        break;
+
       // Node discovery tools
       case 'list_categories':
         result = listCategories();

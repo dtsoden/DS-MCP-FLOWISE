@@ -212,6 +212,12 @@ Then in your MCP config:
 
 ## Available Tools
 
+### Getting Started
+
+| Tool | Description |
+|------|-------------|
+| `get_usage_guide` | **CALL THIS FIRST.** Returns instructions on how to properly use the MCP server to build valid chatflows. |
+
 ### Node Discovery
 
 | Tool | Description |
