@@ -294,6 +294,43 @@ function parseMarketplaceTemplates(marketplacePath: string): MarketplaceTemplate
   return templates;
 }
 
+// Extract baseClasses mapping from marketplace templates
+function extractBaseClassesFromTemplates(templates: MarketplaceTemplate[]): Map<string, string[]> {
+  const baseClassesMap = new Map<string, string[]>();
+
+  for (const template of templates) {
+    for (const node of template.nodes) {
+      const nodeName = node.data?.name;
+      const baseClasses = node.data?.baseClasses;
+
+      if (nodeName && baseClasses && Array.isArray(baseClasses) && baseClasses.length > 0) {
+        // Keep the longest baseClasses array for each node (most complete inheritance chain)
+        const existing = baseClassesMap.get(nodeName);
+        if (!existing || baseClasses.length > existing.length) {
+          baseClassesMap.set(nodeName, baseClasses);
+        }
+      }
+    }
+  }
+
+  return baseClassesMap;
+}
+
+// Enrich nodes with baseClasses from templates
+function enrichNodesWithBaseClasses(nodes: ExtractedNode[], baseClassesMap: Map<string, string[]>): void {
+  let enrichedCount = 0;
+
+  for (const node of nodes) {
+    const templateBaseClasses = baseClassesMap.get(node.name);
+    if (templateBaseClasses && templateBaseClasses.length > node.baseClasses.length) {
+      node.baseClasses = templateBaseClasses;
+      enrichedCount++;
+    }
+  }
+
+  console.log(`Enriched ${enrichedCount} nodes with baseClasses from templates`);
+}
+
 async function main() {
   const flowiseSourcePath = path.join(process.cwd(), 'flowise-source');
   const nodesPath = path.join(flowiseSourcePath, 'packages', 'components', 'nodes');
@@ -326,6 +363,12 @@ async function main() {
   const templates = parseMarketplaceTemplates(marketplacePath);
   console.log(`Extracted ${templates.length} templates`);
 
+  // Extract baseClasses from templates and enrich nodes
+  console.log('\nEnriching nodes with baseClasses from templates...');
+  const baseClassesMap = extractBaseClassesFromTemplates(templates);
+  console.log(`Found baseClasses for ${baseClassesMap.size} node types in templates`);
+  enrichNodesWithBaseClasses(nodes, baseClassesMap);
+
   // Ensure output directory exists
   if (!fs.existsSync(outputPath)) {
     fs.mkdirSync(outputPath, { recursive: true });
@@ -342,6 +385,16 @@ async function main() {
     JSON.stringify(templates, null, 2)
   );
 
+  // Write baseClasses mapping for reference
+  const baseClassesObj: Record<string, string[]> = {};
+  baseClassesMap.forEach((value, key) => {
+    baseClassesObj[key] = value;
+  });
+  fs.writeFileSync(
+    path.join(outputPath, 'baseClasses.json'),
+    JSON.stringify(baseClassesObj, null, 2)
+  );
+
   // Write summary
   const summary = {
     extractedAt: new Date().toISOString(),
@@ -353,7 +406,8 @@ async function main() {
       agentflow: templates.filter(t => t.type === 'agentflow').length,
       agentflowv2: templates.filter(t => t.type === 'agentflowv2').length,
       tool: templates.filter(t => t.type === 'tool').length,
-    }
+    },
+    baseClassesMappingCount: baseClassesMap.size
   };
 
   fs.writeFileSync(

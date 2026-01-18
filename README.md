@@ -74,19 +74,55 @@ Instead of manually importing JSON, you can connect directly to your Flowise ins
 
 ### Setup
 
-1. Create a `.env` file in the project root (or in your working directory):
+**Option 1: Inline Configuration (Recommended)**
+
+Add the environment variables directly in your MCP configuration:
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "flowise": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "ds-mcp-flowise"],
+      "env": {
+        "FLOWISE_API_URL": "https://your-flowise-instance.com",
+        "FLOWISE_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+**Mac / Linux:**
+```json
+{
+  "mcpServers": {
+    "flowise": {
+      "command": "npx",
+      "args": ["-y", "ds-mcp-flowise"],
+      "env": {
+        "FLOWISE_API_URL": "https://your-flowise-instance.com",
+        "FLOWISE_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+**Option 2: Environment File**
+
+Create a `.env` file in your working directory:
 
 ```bash
 FLOWISE_API_URL=https://your-flowise-instance.com
 FLOWISE_API_KEY=your-api-key-here
 ```
 
-2. Get your API key from Flowise:
-   - Open your Flowise instance
-   - Go to **Settings** → **API Keys**
-   - Create a new API key or copy an existing one
-
-3. The MCP server will automatically load credentials from `.env` when it starts.
+**Getting your API key:**
+1. Open your Flowise instance
+2. Go to **Settings** → **API Keys**
+3. Create a new API key or copy an existing one
 
 ### Usage
 
@@ -101,8 +137,9 @@ Once configured, you can ask Claude:
 
 ### Security Notes
 
-- Never commit your `.env` file to version control
-- The `.env` file is already in `.gitignore`
+- Never commit API keys to version control
+- If using `.env` files, they're already in `.gitignore`
+- If using inline config, ensure your MCP config file is not shared publicly
 - API keys should be kept private and rotated periodically
 
 ## Alternative Installation Methods
@@ -199,7 +236,7 @@ Then in your MCP config:
 | `validate_flow` | Validate a flow's nodes and connections |
 | `generate_flow_skeleton` | Generate a starting flow for common use cases |
 
-### Flowise API (requires .env configuration)
+### Flowise API (requires API configuration)
 
 | Tool | Description |
 |------|-------------|
@@ -256,6 +293,30 @@ npm run prepare-db
 
 npm run build
 ```
+
+## Known Issues
+
+All previously reported issues have been fixed in version 1.2.0:
+
+- ✅ `flowise_create_chatflow` now includes `type` parameter (CHATFLOW, AGENTFLOW, MULTIAGENT, ASSISTANT)
+- ✅ Node `baseClasses` are now enriched from marketplace templates
+- ✅ Input classification (inputAnchors vs inputParams) fixed for `asyncOptions` types
+- ✅ Edge and output anchor ID formats now match Flowise conventions
+
+## Troubleshooting
+
+**"Invalid Chatflow Type" error when creating flows**
+- This is a known issue with the `flowise_create_chatflow` tool
+- Workaround: Create a blank chatflow in Flowise UI first, then use `flowise_update_chatflow`
+
+**Connection test fails**
+- Verify your `FLOWISE_API_URL` is correct and accessible
+- Ensure your API key is valid and has the right permissions
+- Check if your Flowise instance requires HTTPS
+
+**Claude doesn't use the flowise tools**
+- Always explicitly mention "flowise tools" or "flowise MCP" in your prompt
+- Example: "**Use the flowise tools** to build me a chatbot"
 
 ## Credits
 

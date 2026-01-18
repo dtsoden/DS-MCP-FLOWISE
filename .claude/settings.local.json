@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__flowise__flowise_test_connection",
+      "mcp__flowise__flowise_list_chatflows",
+      "mcp__flowise__flowise_get_chatflow",
+      "mcp__flowise__generate_flow_skeleton",
+      "mcp__flowise__get_node_schema",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\DavidSoden\\\\DS-MCP-FLOWISE\" -File -Recurse)",
+      "Bash(Where-Object { $_FullName -notlike \"*flowise-source*\" -and $_FullName -notlike \"*node_modules*\" -and $_FullName -notlike \"*.git*\" })",
+      "Bash(Select-Object FullName)",
+      "Bash(npm run extract:*)",
+      "Bash(npm run prepare-db:*)",
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git rebase:*)",
+      "Bash(git -c core.editor=true rebase:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "shadcn",
+    "github"
+  ]
+}

@@ -144,16 +144,18 @@ function createFlowiseEdge(
     };
   }
 
-  // Get source output info (baseClasses)
-  const sourceBaseClasses = sourceNode.baseClasses || [sourceNode.name];
-  const sourceHandle = `${sourceNodeId}-output-${sourceNodeType}-${sourceBaseClasses.join('|')}`;
+  // Get source output info (baseClasses) - use type (PascalCase) as first element
+  const sourceBaseClasses = sourceNode.baseClasses || [sourceNode.type || sourceNode.name];
+  const sourceTypeChain = sourceBaseClasses.join('|');
+  const sourceHandle = `${sourceNodeId}-output-${sourceNode.name}-${sourceTypeChain}`;
 
   // Get target input info
   const targetInput = targetNode.inputs?.find((i: any) => i.name === targetInputName);
   const targetType = targetInput?.type || sourceBaseClasses[0];
   const targetHandle = `${targetNodeId}-input-${targetInputName}-${targetType}`;
 
-  const edgeId = `${sourceHandle}-${targetHandle}`;
+  // Edge ID format: {sourceNodeId}-{sourceHandle}-{targetNodeId}-{targetHandle}
+  const edgeId = `${sourceNodeId}-${sourceHandle}-${targetNodeId}-${targetHandle}`;
 
   return {
     source: sourceNodeId,
@@ -199,13 +201,16 @@ function createFlowiseNode(
     };
   }
 
-  // Separate inputs into params (string/number/boolean) and anchors (node connections)
+  // Separate inputs into params (string/number/boolean/asyncOptions) and anchors (node connections)
   const inputParams: any[] = [];
   const inputAnchors: any[] = [];
   const inputs: Record<string, any> = {};
 
+  // Types that are parameters (not connection anchors)
+  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'asyncOptions', 'json', 'code', 'file'];
+
   for (const input of (nodeInfo.inputs || [])) {
-    const isAnchor = !['string', 'number', 'boolean', 'password', 'options', 'json', 'code'].includes(input.type);
+    const isAnchor = !paramTypes.includes(input.type);
 
     if (isAnchor) {
       // This is a connection anchor
@@ -235,17 +240,18 @@ function createFlowiseNode(
     }
   }
 
-  // Build output anchors from baseClasses
-  const baseClasses = nodeInfo.baseClasses || [nodeInfo.name];
+  // Build output anchors from baseClasses - use type (PascalCase) as first element if available
+  const baseClasses = nodeInfo.baseClasses || [nodeInfo.type || nodeInfo.name];
+  const typeChain = baseClasses.join('|');
   const outputAnchors: any[] = [{
     name: 'output',
     label: 'Output',
     type: 'options',
     options: [{
-      id: `${id}-output-${nodeInfo.name}-${baseClasses.join('|')}`,
+      id: `${id}-output-${nodeInfo.name}-${typeChain}`,
       name: nodeInfo.name,
       label: nodeInfo.label || nodeInfo.name,
-      type: baseClasses.join(' | ')
+      type: typeChain
     }],
     default: nodeInfo.name
   }];
@@ -255,7 +261,7 @@ function createFlowiseNode(
     label: nodeInfo.label || nodeType,
     version: nodeInfo.version || 1,
     name: nodeInfo.name,
-    type: nodeInfo.name,
+    type: nodeInfo.type || nodeInfo.name,  // Use type (PascalCase) not name
     baseClasses,
     category: nodeInfo.category || '',
     description: nodeInfo.description || '',
@@ -527,6 +533,11 @@ const TOOLS = [
         name: {
           type: 'string',
           description: 'Name for the chatflow',
+        },
+        type: {
+          type: 'string',
+          enum: ['CHATFLOW', 'AGENTFLOW', 'MULTIAGENT', 'ASSISTANT'],
+          description: 'Type of flow: CHATFLOW (standard), AGENTFLOW, MULTIAGENT, or ASSISTANT. Defaults to CHATFLOW.',
         },
         nodes: {
           type: 'array',
@@ -985,10 +996,12 @@ async function flowiseCreateChatflow(
   name: string,
   nodes: any[],
   edges: any[],
+  type: string = 'CHATFLOW',
   deployed: boolean = false
 ): Promise<string> {
   const flowData = {
     name,
+    type,
     flowData: JSON.stringify({ nodes, edges }),
     deployed,
   };
@@ -998,6 +1011,7 @@ async function flowiseCreateChatflow(
     success: true,
     id: result.id,
     name: result.name,
+    type: result.type,
     message: `Chatflow "${name}" created successfully!`,
     url: `${FLOWISE_API_URL}/chatflows/${result.id}`,
   }, null, 2);
@@ -1092,6 +1106,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           args?.name as string,
           args?.nodes as any[],
           args?.edges as any[],
+          (args?.type as string) || 'CHATFLOW',
           args?.deployed as boolean
         );
         break;

@@ -1,5 +1,5 @@
 {
-  "extractedAt": "2026-01-17T20:45:56.390Z",
+  "extractedAt": "2026-01-18T16:00:51.885Z",
   "totalNodes": 311,
   "categories": [
     "Agent Flows",
@@ -35,5 +35,6 @@
     "agentflow": 14,
     "agentflowv2": 13,
     "tool": 13
-  }
+  },
+  "baseClassesMappingCount": 79
 }
