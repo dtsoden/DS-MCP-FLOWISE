@@ -212,6 +212,12 @@ Then in your MCP config:
 
 ## Available Tools
 
+### Server Info
+
+| Tool | Description |
+|------|-------------|
+| `get_version` | Get the current version of the MCP server. Returns version dynamically from package.json. |
+
 ### Getting Started
 
 | Tool | Description |

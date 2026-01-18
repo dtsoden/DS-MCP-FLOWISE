@@ -25,6 +25,29 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load package.json to get version dynamically
+function getPackageVersion(): string {
+  const possiblePaths = [
+    path.join(__dirname, '..', 'package.json'),
+    path.join(__dirname, '..', '..', 'package.json'),
+    path.join(process.cwd(), 'package.json'),
+  ];
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        return pkg.version || '0.0.0';
+      } catch {
+        continue;
+      }
+    }
+  }
+  return '0.0.0';
+}
+
+const PACKAGE_VERSION = getPackageVersion();
+
 // Load .env file if it exists
 function loadEnv() {
   const envPaths = [
@@ -323,7 +346,7 @@ async function flowiseApiRequest(
 const server = new Server(
   {
     name: 'ds-mcp-flowise',
-    version: '1.1.0',
+    version: PACKAGE_VERSION,
   },
   {
     capabilities: {
@@ -337,6 +360,16 @@ const server = new Server(
 // === TOOL DEFINITIONS ===
 
 const TOOLS = [
+  // Server info
+  {
+    name: 'get_version',
+    description: 'Get the current version of the DS-MCP-FLOWISE server. Useful for checking compatibility and troubleshooting.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
   // MUST READ FIRST - Usage guide for AI assistants
   {
     name: 'get_usage_guide',
@@ -1072,6 +1105,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let result: string;
 
     switch (name) {
+      // Server info
+      case 'get_version':
+        result = JSON.stringify({
+          name: 'ds-mcp-flowise',
+          version: PACKAGE_VERSION,
+          description: 'MCP server for building and managing Flowise chatflows and agentflows',
+        }, null, 2);
+        break;
+
       // Usage guide - MUST READ FIRST
       case 'get_usage_guide':
         result = JSON.stringify({
