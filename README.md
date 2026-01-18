@@ -216,7 +216,17 @@ Then in your MCP config:
 
 | Tool | Description |
 |------|-------------|
-| `get_usage_guide` | **CALL THIS FIRST.** Returns instructions on how to properly use the MCP server to build valid chatflows. |
+| `get_usage_guide` | **CALL THIS FIRST.** Returns comprehensive instructions for AI assistants on how to properly use the MCP server. |
+
+The `get_usage_guide` tool returns:
+- **Warnings** about corrupted chatflows and Flowise UI crashes from malformed data
+- **Workflow** - step-by-step process for building valid chatflows
+- **Critical rules** - what you must and must not do
+- **Node properties** - complete schema of ALL node properties with required/optional status
+- **Edge properties** - complete schema of ALL edge properties with required/optional status
+- **Connection rules** - how nodes connect and compatibility requirements
+- **Common mistakes** - specific errors to avoid
+- **Example workflow** - concrete example of swapping a node type
 
 ### Node Discovery
 
