@@ -1119,9 +1119,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = JSON.stringify({
           title: 'Flowise MCP Server - Usage Guide',
           important: 'READ THIS COMPLETELY BEFORE USING OTHER TOOLS',
+
+          // ============================================================
+          // ABSOLUTE RULES - VIOLATING THESE WILL BREAK THE FLOW
+          // ============================================================
+          ABSOLUTE_RULES: {
+            _READ_THIS_FIRST: '⚠️⚠️⚠️ THESE RULES ARE NON-NEGOTIABLE. VIOLATING THEM CREATES BROKEN, UNUSABLE FLOWS. ⚠️⚠️⚠️',
+
+            RULE_1_NODE_STRUCTURE_IS_SACRED: {
+              rule: 'NEVER modify, simplify, reorganize, or omit ANY part of a node structure from get_node_schema',
+              explanation: 'The node schema from the database is the EXACT structure Flowise expects. It was extracted directly from Flowise source code. Every field exists for a reason.',
+              violation_example: 'Omitting the credential field because you think it is optional - THIS BREAKS AUTHENTICATION',
+              correct_behavior: 'Copy the ENTIRE node structure exactly. If you do not have a value for a field, leave it empty/null - but the field MUST EXIST.',
+            },
+
+            RULE_2_CREDENTIAL_IS_REQUIRED_WHEN_PRESENT: {
+              rule: 'If get_node_schema returns a "credential" field for a node, that field is REQUIRED in your output',
+              explanation: 'The credential field is how users configure authentication (API keys, OAuth, etc). Without it, the node CANNOT be configured and is USELESS.',
+              violation_example: 'Creating a Google Calendar node without the credential field - user cannot connect their Google account',
+              correct_behavior: 'Include the credential object exactly as returned by get_node_schema. The user will configure the actual credential in the Flowise UI.',
+            },
+
+            RULE_3_ONLY_FILL_VALUES_YOU_KNOW: {
+              rule: 'Only populate the "inputs" object with values you actually have. Leave everything else as empty string or default.',
+              explanation: 'Your job is to create the node STRUCTURE. The user will configure specific values in the Flowise UI.',
+              violation_example: 'Removing input fields you do not have values for',
+              correct_behavior: 'Keep ALL input fields. Set known values, leave unknown values as empty string "".',
+            },
+
+            RULE_4_DO_NOT_IMPROVE_OR_SIMPLIFY: {
+              rule: 'Do NOT try to "improve", "clean up", "simplify", or "optimize" the node structure',
+              explanation: 'You are not smarter than the Flowise source code. The structure is exactly what Flowise needs.',
+              violation_example: 'Removing "unnecessary" fields, combining fields, renaming properties',
+              correct_behavior: 'Use the structure VERBATIM. Your only job is to fill in values, not redesign the node.',
+            },
+          },
+
           warnings: [
             'DANGER: Sending malformed node data can create CORRUPTED chatflows that CRASH the Flowise UI',
             'DANGER: Flowise may partially create a chatflow even when the API returns an error, leaving corrupted data',
+            'DANGER: Omitting the credential field makes nodes UNCONFIGURABLE - users cannot set up authentication',
             'ALWAYS call validate_flow BEFORE flowise_create_chatflow to prevent corruption',
             'If you create a corrupted chatflow, you must delete it via flowise_delete_chatflow',
           ],
@@ -1129,16 +1166,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             '1. Call get_usage_guide (this tool) - understand how to use the server',
             '2. Call list_templates to find a similar flow as your starting point',
             '3. Call get_template to get the EXACT structure of a working flow',
-            '4. Call search_nodes or get_node_schema to find nodes you need to swap in',
-            '5. Call validate_flow to verify your flow BEFORE creating',
-            '6. Call flowise_create_chatflow to deploy',
+            '4. Call get_node_schema for EACH node you need - this returns the COMPLETE node definition',
+            '5. Build your nodes using the EXACT structure from get_node_schema - do NOT omit any fields',
+            '6. Call validate_flow to verify your flow BEFORE creating',
+            '7. Call flowise_create_chatflow to deploy',
           ],
           critical_rules: [
-            'NEVER invent your own node structure - ALWAYS use templates as the source of truth',
-            'The skeleton from generate_flow_skeleton or get_template is the EXACT format required',
+            'NEVER invent your own node structure - ALWAYS use get_node_schema as the source of truth',
+            'The node from get_node_schema is COMPLETE - do NOT remove fields, do NOT simplify',
+            'If get_node_schema returns a credential field, YOUR NODE MUST HAVE THAT CREDENTIAL FIELD',
             'Do NOT simplify, reorganize, or rewrite the node structure',
-            'Only change: node name/type, and values in the "inputs" object',
-            'Keep ALL properties exactly as shown in required_node_structure below',
+            'Only change: values in the "inputs" object where you have actual data',
+            'Keep ALL properties exactly as returned by get_node_schema',
             'Edges define connections - copy the format EXACTLY from templates',
           ],
           node_properties: {
@@ -1239,6 +1278,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 example: ['ChatOpenAI', 'BaseChatModel', 'BaseLLM'],
                 description: 'Inheritance chain. CRITICAL for edge connections. Get from get_node_schema.',
               },
+              credential: {
+                required: 'REQUIRED IF PRESENT IN get_node_schema - DO NOT OMIT',
+                type: 'object',
+                description: '⚠️ CRITICAL: If get_node_schema returns a credential field, you MUST include it. This is how users configure authentication (API keys, OAuth tokens, etc). Omitting this field makes the node UNUSABLE - users cannot connect their accounts.',
+                example: {
+                  label: 'Connect Credential',
+                  name: 'credential',
+                  type: 'credential',
+                  credentialNames: ['googleCalendarOAuth2'],
+                },
+                when_present: 'MUST be included exactly as returned by get_node_schema',
+                when_absent: 'If get_node_schema does not return a credential field, the node does not require authentication - do not add one',
+                common_mistake: 'Omitting credential field for nodes like Google Calendar, Gmail, OpenAI - this breaks the node completely',
+              },
               inputParams: {
                 required: true,
                 type: 'array',
@@ -1290,11 +1343,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 required: false,
                 type: 'object',
                 description: 'Output configuration. Usually auto-generated by Flowise.',
-              },
-              credential: {
-                required: false,
-                type: 'string',
-                description: 'Credential ID for nodes requiring authentication. Set in Flowise UI after import.',
               },
             },
           },
@@ -1368,7 +1416,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           },
           common_mistakes: [
-            'Creating nodes from scratch instead of copying from templates',
+            '⚠️ OMITTING THE CREDENTIAL FIELD - This is the #1 mistake. If get_node_schema returns credential, YOU MUST INCLUDE IT',
+            '⚠️ Simplifying or "cleaning up" the node structure - DO NOT DO THIS, use it exactly as returned',
+            'Creating nodes from scratch instead of using get_node_schema output',
             'Removing or omitting inputAnchors or outputAnchors arrays',
             'Removing or omitting inputParams array',
             'Missing position, width, or height properties',
@@ -1376,7 +1426,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             'Missing data.baseClasses array',
             'Inventing edge IDs instead of following the exact format',
             'Not including data.id (must match the node id)',
-            'Simplifying or flattening the nested data structure',
+            'Trying to be "helpful" by removing fields you think are unnecessary - NEVER DO THIS',
           ],
           example_workflow: {
             task: 'Build a RAG chatbot with Postgres instead of Pinecone',
@@ -1402,10 +1452,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
           what_you_must_NOT_change: [
             'The overall node structure (all properties must exist)',
+            'The credential field (if present in schema) - NEVER REMOVE THIS',
             'The data object structure (inputParams, inputAnchors, outputAnchors, inputs must all exist)',
             'The edge format (sourceHandle, targetHandle patterns)',
             'The type: "customNode" on nodes',
             'The type: "buttonedge" on edges',
+            'ANY field returned by get_node_schema - if it exists in the schema, it must exist in your output',
           ],
         }, null, 2);
         break;

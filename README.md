@@ -225,6 +225,7 @@ Then in your MCP config:
 | `get_usage_guide` | **CALL THIS FIRST.** Returns comprehensive instructions for AI assistants on how to properly use the MCP server. |
 
 The `get_usage_guide` tool returns:
+- **ABSOLUTE_RULES** - Non-negotiable rules that MUST be followed (see below)
 - **Warnings** about corrupted chatflows and Flowise UI crashes from malformed data
 - **Workflow** - step-by-step process for building valid chatflows
 - **Critical rules** - what you must and must not do
@@ -233,6 +234,18 @@ The `get_usage_guide` tool returns:
 - **Connection rules** - how nodes connect and compatibility requirements
 - **Common mistakes** - specific errors to avoid
 - **Example workflow** - concrete example of swapping a node type
+
+### ⚠️ ABSOLUTE RULES for AI Assistants
+
+**These rules are embedded in `get_usage_guide` but are critical enough to highlight here:**
+
+1. **NODE STRUCTURE IS SACRED** - Never modify, simplify, reorganize, or omit ANY part of a node structure from `get_node_schema`. The schema is extracted directly from Flowise source code - every field exists for a reason.
+
+2. **CREDENTIAL FIELD IS REQUIRED WHEN PRESENT** - If `get_node_schema` returns a `credential` field for a node (like Google Calendar, Gmail, OpenAI nodes), that field MUST be included in your output. This is how users configure authentication. Omitting it makes the node **completely unusable**.
+
+3. **ONLY FILL VALUES YOU KNOW** - Only populate the `inputs` object with values you actually have. Leave everything else as empty string or default. Your job is to create the structure - the user configures values in the Flowise UI.
+
+4. **DO NOT "IMPROVE" OR "SIMPLIFY"** - Do not try to clean up, optimize, or reorganize the node structure. Use it exactly as returned by `get_node_schema`.
 
 ### Node Discovery
 
@@ -318,12 +331,13 @@ npm run build
 
 ## Known Issues
 
-All previously reported issues have been fixed in version 1.2.0:
+All previously reported issues have been fixed:
 
 - ✅ `flowise_create_chatflow` now includes `type` parameter (CHATFLOW, AGENTFLOW, MULTIAGENT, ASSISTANT)
 - ✅ Node `baseClasses` are now enriched from marketplace templates
 - ✅ Input classification (inputAnchors vs inputParams) fixed for `asyncOptions` types
 - ✅ Edge and output anchor ID formats now match Flowise conventions
+- ✅ **NEW:** `get_usage_guide` now includes ABSOLUTE_RULES with explicit guidance about credential fields and node structure preservation
 
 ## Troubleshooting
 
