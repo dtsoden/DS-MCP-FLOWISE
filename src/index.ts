@@ -231,7 +231,8 @@ function createFlowiseNode(
 
   // Types that are parameters (not connection anchors)
   // IMPORTANT: 'credential' must be in paramTypes - credentials appear in inputParams, not inputAnchors
-  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'asyncOptions', 'json', 'code', 'file', 'credential'];
+  // IMPORTANT: 'multiOptions' must be in paramTypes - it's a multi-select UI field, not a node connection
+  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'multiOptions', 'asyncOptions', 'json', 'code', 'file', 'credential'];
 
   // Handle credential field if it exists (defined separately from inputs in Flowise)
   if (nodeInfo.credential) {
@@ -728,7 +729,8 @@ function getNodeSchema(name: string): string {
   const nodeId = `${name}_0`;
 
   // Types that are parameters (UI fields), not connection anchors
-  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'asyncOptions', 'json', 'code', 'file', 'credential'];
+  // IMPORTANT: 'multiOptions' must be here - it's a multi-select UI field, not a node connection
+  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'multiOptions', 'asyncOptions', 'json', 'code', 'file', 'credential'];
 
   const inputParams: any[] = [];
   const inputAnchors: any[] = [];
