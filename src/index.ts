@@ -230,7 +230,19 @@ function createFlowiseNode(
   const inputs: Record<string, any> = {};
 
   // Types that are parameters (not connection anchors)
-  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'asyncOptions', 'json', 'code', 'file'];
+  // IMPORTANT: 'credential' must be in paramTypes - credentials appear in inputParams, not inputAnchors
+  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'asyncOptions', 'json', 'code', 'file', 'credential'];
+
+  // Handle credential field if it exists (defined separately from inputs in Flowise)
+  if (nodeInfo.credential) {
+    inputParams.push({
+      label: nodeInfo.credential.label || 'Connect Credential',
+      name: nodeInfo.credential.name || 'credential',
+      type: 'credential',
+      credentialNames: nodeInfo.credential.credentialNames || [],
+      id: `${id}-input-credential-credential`
+    });
+  }
 
   for (const input of (nodeInfo.inputs || [])) {
     const isAnchor = !paramTypes.includes(input.type);
@@ -709,23 +721,129 @@ function getNodeSchema(name: string): string {
     ORDER BY additional_params, input_label
   `, [name]);
 
-  const schema = {
-    ...node,
-    base_classes: JSON.parse(node.base_classes || '[]'),
-    credential: node.credential ? JSON.parse(node.credential) : null,
-    inputs: inputs.map((i: any) => ({
-      name: i.input_name,
-      label: i.input_label,
-      type: i.input_type,
-      description: i.description,
-      optional: Boolean(i.optional),
-      default: i.default_value,
-      options: i.options ? JSON.parse(i.options) : null,
-      additionalParams: Boolean(i.additional_params),
-    })),
+  const baseClasses = JSON.parse(node.base_classes || '[]');
+  const credential = node.credential ? JSON.parse(node.credential) : null;
+
+  // Use a placeholder node ID - AI should replace "0" with their desired suffix
+  const nodeId = `${name}_0`;
+
+  // Types that are parameters (UI fields), not connection anchors
+  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'asyncOptions', 'json', 'code', 'file', 'credential'];
+
+  const inputParams: any[] = [];
+  const inputAnchors: any[] = [];
+  const inputsObj: Record<string, any> = {};
+
+  // Add credential to inputParams if it exists
+  if (credential) {
+    inputParams.push({
+      label: credential.label || 'Connect Credential',
+      name: credential.name || 'credential',
+      type: 'credential',
+      credentialNames: credential.credentialNames || [],
+      id: `${nodeId}-input-credential-credential`
+    });
+  }
+
+  // Process each input field
+  for (const input of inputs) {
+    const inputType = input.input_type;
+    const inputName = input.input_name;
+    const isParam = paramTypes.includes(inputType);
+
+    if (isParam) {
+      // This is a UI parameter (text field, dropdown, etc.)
+      const param: any = {
+        label: input.input_label,
+        name: inputName,
+        type: inputType,
+        id: `${nodeId}-input-${inputName}-${inputType}`
+      };
+
+      if (input.description) param.description = input.description;
+      if (input.optional) param.optional = true;
+      if (input.default_value !== null) param.default = input.default_value;
+      if (input.options) param.options = JSON.parse(input.options);
+      if (input.additional_params) param.additionalParams = true;
+
+      inputParams.push(param);
+      inputsObj[inputName] = input.default_value !== null ? input.default_value : '';
+    } else {
+      // This is a connection anchor (connects to another node's output)
+      const anchor: any = {
+        label: input.input_label,
+        name: inputName,
+        type: inputType,
+        id: `${nodeId}-input-${inputName}-${inputType}`
+      };
+
+      if (input.optional) anchor.optional = true;
+      if (input.description) anchor.description = input.description;
+
+      inputAnchors.push(anchor);
+      inputsObj[inputName] = '';
+    }
+  }
+
+  // Build outputAnchors
+  const typeChain = baseClasses.join('|');
+  const outputAnchors = [{
+    id: `${nodeId}-output-${name}-${typeChain}`,
+    name: name,
+    label: node.label,
+    description: node.description,
+    type: typeChain.replace(/\|/g, ' | ')  // Format for display: "Type1 | Type2"
+  }];
+
+  // Return a ready-to-use node template
+  const nodeTemplate = {
+    id: nodeId,
+    position: { x: 0, y: 0 },
+    type: 'customNode',
+    width: 300,
+    height: Math.max(300, 150 + (inputParams.length + inputAnchors.length) * 50),
+    data: {
+      id: nodeId,
+      label: node.label,
+      version: node.version,
+      name: name,
+      type: node.type,
+      baseClasses: baseClasses,
+      category: node.category,
+      description: node.description,
+      inputParams: inputParams,
+      inputAnchors: inputAnchors,
+      inputs: inputsObj,
+      outputAnchors: outputAnchors,
+      outputs: {},
+      selected: false
+    },
+    selected: false
   };
 
-  return JSON.stringify(schema, null, 2);
+  return JSON.stringify({
+    node_template: nodeTemplate,
+    usage: {
+      instructions: [
+        'This is a READY-TO-USE node template. Copy it exactly into your nodes array.',
+        'ONLY modify these fields:',
+        '  1. node.id and node.data.id - change suffix (e.g., chatOpenAI_0 -> chatOpenAI_1)',
+        '  2. node.position.x and node.position.y - set canvas coordinates',
+        '  3. node.data.inputs.* - fill in your actual values (leave empty string for unconfigured)',
+        'After changing node.id, you MUST update ALL id fields that contain the old ID:',
+        '  - Every inputParams[].id',
+        '  - Every inputAnchors[].id',
+        '  - Every outputAnchors[].id',
+        'DO NOT remove any fields. DO NOT add fields. DO NOT restructure.',
+      ],
+      id_format: {
+        node_id: `${name}_<number>`,
+        inputParam_id: `${name}_<number>-input-<paramName>-<paramType>`,
+        inputAnchor_id: `${name}_<number>-input-<anchorName>-<anchorType>`,
+        outputAnchor_id: `${name}_<number>-output-${name}-${typeChain}`,
+      }
+    }
+  }, null, 2);
 }
 
 function searchNodes(searchQuery: string, limit: number = 10): string {
@@ -1121,64 +1239,63 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           important: 'READ THIS COMPLETELY BEFORE USING OTHER TOOLS',
 
           // ============================================================
-          // ABSOLUTE RULES - VIOLATING THESE WILL BREAK THE FLOW
+          // SIMPLE RULES - get_node_schema now returns READY-TO-USE templates
           // ============================================================
           ABSOLUTE_RULES: {
-            _READ_THIS_FIRST: '⚠️⚠️⚠️ THESE RULES ARE NON-NEGOTIABLE. VIOLATING THEM CREATES BROKEN, UNUSABLE FLOWS. ⚠️⚠️⚠️',
+            _READ_THIS_FIRST: '⚠️ get_node_schema returns a READY-TO-USE node_template. Copy it directly into your nodes array.',
 
-            RULE_1_NODE_STRUCTURE_IS_SACRED: {
-              rule: 'NEVER modify, simplify, reorganize, or omit ANY part of a node structure from get_node_schema',
-              explanation: 'The node schema from the database is the EXACT structure Flowise expects. It was extracted directly from Flowise source code. Every field exists for a reason.',
-              violation_example: 'Omitting the credential field because you think it is optional - THIS BREAKS AUTHENTICATION',
-              correct_behavior: 'Copy the ENTIRE node structure exactly. If you do not have a value for a field, leave it empty/null - but the field MUST EXIST.',
+            RULE_1_USE_THE_TEMPLATE: {
+              rule: 'get_node_schema returns a node_template object. Use it EXACTLY as provided.',
+              what_to_change: [
+                'node.id and node.data.id - change the suffix number if needed (e.g., chatOpenAI_0 → chatOpenAI_1)',
+                'node.position.x and node.position.y - set canvas coordinates',
+                'node.data.inputs.* - fill in your actual configuration values',
+              ],
+              what_NOT_to_change: [
+                'DO NOT remove any fields',
+                'DO NOT restructure inputParams, inputAnchors, or outputAnchors',
+                'DO NOT omit credential fields - they are required for authentication',
+              ],
             },
 
-            RULE_2_CREDENTIAL_IS_REQUIRED_WHEN_PRESENT: {
-              rule: 'If get_node_schema returns a "credential" field for a node, that field is REQUIRED in your output',
-              explanation: 'The credential field is how users configure authentication (API keys, OAuth, etc). Without it, the node CANNOT be configured and is USELESS.',
-              violation_example: 'Creating a Google Calendar node without the credential field - user cannot connect their Google account',
-              correct_behavior: 'Include the credential object exactly as returned by get_node_schema. The user will configure the actual credential in the Flowise UI.',
+            RULE_2_UPDATE_ALL_IDS_WHEN_CHANGING_NODE_ID: {
+              rule: 'If you change node.id, you MUST update ALL internal id fields to match',
+              fields_to_update: [
+                'node.data.id',
+                'Every inputParams[].id (format: {nodeId}-input-{name}-{type})',
+                'Every inputAnchors[].id (format: {nodeId}-input-{name}-{type})',
+                'Every outputAnchors[].id (format: {nodeId}-output-{name}-{types|joined|by|pipe})',
+              ],
+              example: 'Changing chatOpenAI_0 to chatOpenAI_1 means updating ~20+ id fields',
             },
 
-            RULE_3_ONLY_FILL_VALUES_YOU_KNOW: {
-              rule: 'Only populate the "inputs" object with values you actually have. Leave everything else as empty string or default.',
-              explanation: 'Your job is to create the node STRUCTURE. The user will configure specific values in the Flowise UI.',
-              violation_example: 'Removing input fields you do not have values for',
-              correct_behavior: 'Keep ALL input fields. Set known values, leave unknown values as empty string "".',
-            },
-
-            RULE_4_DO_NOT_IMPROVE_OR_SIMPLIFY: {
-              rule: 'Do NOT try to "improve", "clean up", "simplify", or "optimize" the node structure',
-              explanation: 'You are not smarter than the Flowise source code. The structure is exactly what Flowise needs.',
-              violation_example: 'Removing "unnecessary" fields, combining fields, renaming properties',
-              correct_behavior: 'Use the structure VERBATIM. Your only job is to fill in values, not redesign the node.',
+            RULE_3_LEAVE_UNKNOWN_VALUES_EMPTY: {
+              rule: 'If you do not know a value, leave it as empty string ""',
+              explanation: 'Users will configure values in the Flowise UI. Do not guess or make up values.',
             },
           },
 
           warnings: [
-            'DANGER: Sending malformed node data can create CORRUPTED chatflows that CRASH the Flowise UI',
-            'DANGER: Flowise may partially create a chatflow even when the API returns an error, leaving corrupted data',
-            'DANGER: Omitting the credential field makes nodes UNCONFIGURABLE - users cannot set up authentication',
-            'ALWAYS call validate_flow BEFORE flowise_create_chatflow to prevent corruption',
-            'If you create a corrupted chatflow, you must delete it via flowise_delete_chatflow',
+            'DANGER: Malformed node data creates CORRUPTED chatflows that CRASH the Flowise UI',
+            'ALWAYS call validate_flow BEFORE flowise_create_chatflow',
+            'If you create a corrupted chatflow, delete it via flowise_delete_chatflow',
           ],
           workflow: [
-            '1. Call get_usage_guide (this tool) - understand how to use the server',
-            '2. Call list_templates to find a similar flow as your starting point',
-            '3. Call get_template to get the EXACT structure of a working flow',
-            '4. Call get_node_schema for EACH node you need - this returns the COMPLETE node definition',
-            '5. Build your nodes using the EXACT structure from get_node_schema - do NOT omit any fields',
-            '6. Call validate_flow to verify your flow BEFORE creating',
-            '7. Call flowise_create_chatflow to deploy',
+            '1. Call get_node_schema for each node type you need - it returns a READY-TO-USE node_template',
+            '2. Copy node_template directly into your nodes array',
+            '3. Update node IDs if using multiple nodes of same type (update ALL internal id fields)',
+            '4. Fill in node.data.inputs with your configuration values',
+            '5. Set node.position.x/y for canvas layout',
+            '6. Create edges connecting nodes (see edge_properties below)',
+            '7. Call validate_flow to verify your flow',
+            '8. Call flowise_create_chatflow to deploy',
           ],
           critical_rules: [
-            'NEVER invent your own node structure - ALWAYS use get_node_schema as the source of truth',
-            'The node from get_node_schema is COMPLETE - do NOT remove fields, do NOT simplify',
-            'If get_node_schema returns a credential field, YOUR NODE MUST HAVE THAT CREDENTIAL FIELD',
-            'Do NOT simplify, reorganize, or rewrite the node structure',
-            'Only change: values in the "inputs" object where you have actual data',
-            'Keep ALL properties exactly as returned by get_node_schema',
-            'Edges define connections - copy the format EXACTLY from templates',
+            'get_node_schema returns node_template - USE IT DIRECTLY, do not reconstruct',
+            'All id fields (inputParams, inputAnchors, outputAnchors) are pre-generated - keep them',
+            'Credentials are included in inputParams when required - never remove them',
+            'Leave unknown input values as empty string - users configure in Flowise UI',
+            'When changing node.id, update ALL internal id fields to match',
           ],
           node_properties: {
             description: 'Complete list of node properties with required/optional status',
@@ -1279,18 +1396,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 description: 'Inheritance chain. CRITICAL for edge connections. Get from get_node_schema.',
               },
               credential: {
-                required: 'REQUIRED IF PRESENT IN get_node_schema - DO NOT OMIT',
-                type: 'object',
-                description: '⚠️ CRITICAL: If get_node_schema returns a credential field, you MUST include it. This is how users configure authentication (API keys, OAuth tokens, etc). Omitting this field makes the node UNUSABLE - users cannot connect their accounts.',
-                example: {
+                note: 'Credentials are now AUTOMATICALLY included in inputParams by get_node_schema',
+                description: 'When a node requires authentication, the credential field appears in inputParams with type "credential". Do not remove it.',
+                example_in_inputParams: {
                   label: 'Connect Credential',
                   name: 'credential',
                   type: 'credential',
-                  credentialNames: ['googleCalendarOAuth2'],
+                  credentialNames: ['openAIApi'],
+                  id: 'chatOpenAI_0-input-credential-credential'
                 },
-                when_present: 'MUST be included exactly as returned by get_node_schema',
-                when_absent: 'If get_node_schema does not return a credential field, the node does not require authentication - do not add one',
-                common_mistake: 'Omitting credential field for nodes like Google Calendar, Gmail, OpenAI - this breaks the node completely',
               },
               inputParams: {
                 required: true,
@@ -1416,48 +1530,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           },
           common_mistakes: [
-            '⚠️ OMITTING THE CREDENTIAL FIELD - This is the #1 mistake. If get_node_schema returns credential, YOU MUST INCLUDE IT',
-            '⚠️ Simplifying or "cleaning up" the node structure - DO NOT DO THIS, use it exactly as returned',
-            'Creating nodes from scratch instead of using get_node_schema output',
-            'Removing or omitting inputAnchors or outputAnchors arrays',
-            'Removing or omitting inputParams array',
-            'Missing position, width, or height properties',
-            'Missing the data.version property',
-            'Missing data.baseClasses array',
-            'Inventing edge IDs instead of following the exact format',
-            'Not including data.id (must match the node id)',
-            'Trying to be "helpful" by removing fields you think are unnecessary - NEVER DO THIS',
+            '⚠️ RECONSTRUCTING nodes instead of using node_template - just copy it directly!',
+            '⚠️ Removing inputParams, inputAnchors, or outputAnchors - NEVER remove these arrays',
+            '⚠️ Changing node.id without updating ALL internal id fields',
+            '⚠️ Removing credential from inputParams - this breaks authentication',
+            'Missing position, width, or height on nodes',
+            'Wrong edge format - use find_compatible_nodes to get correct handles',
           ],
           example_workflow: {
-            task: 'Build a RAG chatbot with Postgres instead of Pinecone',
+            task: 'Build a chatbot with OpenAI and Buffer Memory',
             steps: [
-              '1. list_templates({ type: "chatflow" }) - find RAG-related templates',
-              '2. get_template("Conversational Retrieval QA Chain") - get a working RAG flow with full structure',
-              '3. get_node_schema("postgres") - understand the Postgres node inputs and structure',
-              '4. Copy the ENTIRE template structure',
-              '5. Find the vector store node in the template',
-              '6. Replace ONLY: data.name, data.label, data.type with postgres equivalents',
-              '7. Update data.inputs with Postgres-specific values (host, database, etc.)',
-              '8. Update the edges: change sourceHandle/targetHandle to match new node types',
-              '9. validate_flow({ nodes: [...], edges: [...] }) - MUST pass before creating',
-              '10. flowise_create_chatflow({ name: "...", nodes: [...], edges: [...] }) - deploy',
+              '1. get_node_schema("chatOpenAI") - get ready-to-use node template',
+              '2. get_node_schema("bufferMemory") - get memory node template',
+              '3. get_node_schema("conversationChain") - get chain node template',
+              '4. Copy each node_template into nodes array',
+              '5. Set positions: chatOpenAI at (100,100), bufferMemory at (100,400), conversationChain at (500,200)',
+              '6. Fill inputs: chatOpenAI_0.data.inputs.modelName = "gpt-4o-mini"',
+              '7. Create edges connecting chatOpenAI→conversationChain and bufferMemory→conversationChain',
+              '8. validate_flow({ nodes, edges })',
+              '9. flowise_create_chatflow({ name: "My Chatbot", nodes, edges })',
             ],
           },
           what_you_can_safely_change: [
-            'data.inputs values (the actual configuration)',
-            'data.name, data.label, data.type (when swapping node types)',
-            'data.baseClasses (must match the new node type)',
-            'node id (but must update all references in edges)',
-            'position x/y coordinates',
+            'node.id and node.data.id (but update ALL internal id fields)',
+            'node.position.x and node.position.y',
+            'node.data.inputs.* values',
           ],
           what_you_must_NOT_change: [
-            'The overall node structure (all properties must exist)',
-            'The credential field (if present in schema) - NEVER REMOVE THIS',
-            'The data object structure (inputParams, inputAnchors, outputAnchors, inputs must all exist)',
-            'The edge format (sourceHandle, targetHandle patterns)',
+            'The overall node structure from node_template',
+            'inputParams array - contains credential and configuration fields',
+            'inputAnchors array - defines connection points',
+            'outputAnchors array - defines what outputs the node provides',
             'The type: "customNode" on nodes',
             'The type: "buttonedge" on edges',
-            'ANY field returned by get_node_schema - if it exists in the schema, it must exist in your output',
           ],
         }, null, 2);
         break;
