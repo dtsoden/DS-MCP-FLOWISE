@@ -554,6 +554,10 @@ function parseOutputObject(objContent: string): ParsedOutput | null {
       if (result.content.includes('getBaseClasses')) {
         classes.push('__GET_BASE_CLASSES__');
       }
+      // Check for ...this.baseClasses pattern (inherit from node)
+      if (result.content.includes('...this.baseClasses') || result.content.includes('this.baseClasses')) {
+        classes.push('__THIS_BASE_CLASSES__');
+      }
       if (classes.length > 0) {
         output.baseClasses = classes;
       }
@@ -829,6 +833,21 @@ function insertNode(db: Database, node: ParsedNode): void {
   // Insert outputs (NEW - proper output handling)
   let outputSort = 0;
   for (const output of node.outputs) {
+    // Resolve __THIS_BASE_CLASSES__ marker by merging node's baseClasses
+    let resolvedBaseClasses = output.baseClasses;
+    if (resolvedBaseClasses && resolvedBaseClasses.includes('__THIS_BASE_CLASSES__')) {
+      resolvedBaseClasses = [
+        ...node.baseClasses,
+        ...resolvedBaseClasses.filter(c => c !== '__THIS_BASE_CLASSES__')
+      ];
+    }
+    // Resolve __THIS_TYPE__ marker
+    if (resolvedBaseClasses && resolvedBaseClasses.includes('__THIS_TYPE__')) {
+      resolvedBaseClasses = [
+        node.type,
+        ...resolvedBaseClasses.filter(c => c !== '__THIS_TYPE__')
+      ];
+    }
     db.run(`
       INSERT INTO node_outputs (node_name, output_name, output_label, output_type, base_classes, description, is_hidden, is_anchor, sort_order)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -836,8 +855,8 @@ function insertNode(db: Database, node: ParsedNode): void {
       node.name,
       output.name,
       output.label,
-      isAgentflow ? null : (output.baseClasses ? output.baseClasses.join('|') : node.baseClasses.join('|')),
-      output.baseClasses ? JSON.stringify(output.baseClasses) : JSON.stringify(node.baseClasses),
+      isAgentflow ? null : (resolvedBaseClasses ? resolvedBaseClasses.join('|') : node.baseClasses.join('|')),
+      resolvedBaseClasses ? JSON.stringify(resolvedBaseClasses) : JSON.stringify(node.baseClasses),
       output.description || null,
       output.hidden ? 1 : 0,
       output.isAnchor ? 1 : 0,
