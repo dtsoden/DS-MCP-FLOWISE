@@ -1,6 +1,7 @@
 /**
  * Extract node definitions from Flowise source code - V2
  * Uses proper bracket matching for nested structures
+ * Updated to capture ALL fields from INodeProperties, INodeParams, INodeOutputsValue, INodeOptionsValue
  */
 
 import * as fs from 'fs';
@@ -13,6 +14,64 @@ const FLOWISE_SOURCE = path.join(process.cwd(), 'flowise-source');
 const NODES_PATH = path.join(FLOWISE_SOURCE, 'packages', 'components', 'nodes');
 const MARKETPLACE_PATH = path.join(FLOWISE_SOURCE, 'packages', 'server', 'marketplaces');
 const DB_PATH = path.join(process.cwd(), 'data', 'flowise.db');
+
+// ============================================================================
+// COMMENT STRIPPING
+// ============================================================================
+
+/**
+ * Strip block comments from content while preserving string literals
+ * This prevents parsing options/inputs that are commented out
+ */
+function stripBlockComments(content: string): string {
+  let result = '';
+  let i = 0;
+
+  while (i < content.length) {
+    // Check for string literals - preserve them as-is
+    if (content[i] === '"' || content[i] === "'" || content[i] === '`') {
+      const quote = content[i];
+      result += content[i];
+      i++;
+      while (i < content.length && content[i] !== quote) {
+        if (content[i] === '\\') {
+          result += content[i];
+          i++;
+        }
+        if (i < content.length) {
+          result += content[i];
+          i++;
+        }
+      }
+      if (i < content.length) {
+        result += content[i];
+        i++;
+      }
+    }
+    // Check for block comment start
+    else if (content[i] === '/' && content[i + 1] === '*') {
+      // Skip until we find */
+      i += 2;
+      while (i < content.length - 1 && !(content[i] === '*' && content[i + 1] === '/')) {
+        i++;
+      }
+      i += 2; // Skip the closing */
+    }
+    // Check for single-line comment
+    else if (content[i] === '/' && content[i + 1] === '/') {
+      // Skip until end of line
+      while (i < content.length && content[i] !== '\n') {
+        i++;
+      }
+    }
+    else {
+      result += content[i];
+      i++;
+    }
+  }
+
+  return result;
+}
 
 // ============================================================================
 // BRACKET MATCHING UTILITIES
@@ -124,6 +183,36 @@ function extractNumberValue(content: string, propertyName: string): number | nul
   return match ? parseFloat(match[1]) : null;
 }
 
+/**
+ * Extract codeExample which might be a string literal or a variable reference
+ * If it's a variable reference, resolve it from the file content
+ */
+function extractCodeExample(objContent: string, fileContent: string): string | null {
+  // First try string literal
+  const stringValue = extractStringValue(objContent, 'codeExample');
+  if (stringValue) return stringValue;
+
+  // Check if it's a variable reference (codeExample: variableName)
+  const varRefPattern = /codeExample\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)/;
+  const varMatch = objContent.match(varRefPattern);
+  if (!varMatch) return null;
+
+  const varName = varMatch[1];
+
+  // Find the const/let declaration in the file
+  // Handle template literals which can span multiple lines
+  const templatePattern = new RegExp(`const\\s+${varName}\\s*=\\s*\`([\\s\\S]*?)\``, 'm');
+  const templateMatch = fileContent.match(templatePattern);
+  if (templateMatch) return templateMatch[1];
+
+  // Handle regular string literals
+  const stringPattern = new RegExp(`const\\s+${varName}\\s*=\\s*['"]([^'"]+)['"]`);
+  const strMatch = fileContent.match(stringPattern);
+  if (strMatch) return strMatch[1];
+
+  return null;
+}
+
 function extractShowHideCondition(content: string, propertyName: string): Record<string, any> | null {
   // Match: show: { ... } or hide: { ... }
   const pattern = new RegExp(`${propertyName}\\s*:\\s*\\{`);
@@ -157,6 +246,50 @@ function extractShowHideCondition(content: string, propertyName: string): Record
   return Object.keys(obj).length > 0 ? obj : null;
 }
 
+/**
+ * Extract hint object or string
+ */
+function extractHint(content: string): any | null {
+  // Check for hint object: hint: { label: '...', value: '...' }
+  const objMatch = content.match(/\bhint\s*:\s*\{/);
+  if (objMatch) {
+    const result = extractObjectContent(content, objMatch.index!);
+    if (result) {
+      const label = extractStringValue(result.content, 'label');
+      const value = extractStringValue(result.content, 'value');
+      if (label || value) {
+        return { label, value };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract datagrid array
+ */
+function extractDatagrid(content: string): any[] | null {
+  const datagridMatch = content.match(/\bdatagrid\s*:\s*\[/);
+  if (datagridMatch) {
+    const result = extractArrayContent(content, datagridMatch.index!);
+    if (result) {
+      // Return the raw content for storage as JSON
+      return splitArrayIntoObjects(result.content).map(obj => {
+        const parsed: any = {};
+        parsed.field = extractStringValue(obj, 'field');
+        parsed.headerName = extractStringValue(obj, 'headerName');
+        parsed.type = extractStringValue(obj, 'type');
+        parsed.flex = extractNumberValue(obj, 'flex');
+        parsed.editable = extractBooleanValue(obj, 'editable');
+        const loadMethod = extractStringValue(obj, 'loadMethod');
+        if (loadMethod) parsed.loadMethod = loadMethod;
+        return parsed;
+      });
+    }
+  }
+  return null;
+}
+
 // ============================================================================
 // INPUT PARSING
 // ============================================================================
@@ -168,27 +301,37 @@ interface ParsedInput {
   description?: string;
   placeholder?: string;
   rows?: number;
-  step?: number;  // step value for number inputs
+  step?: number;
+  warning?: string;
   default?: any;
   optional?: boolean;
   additionalParams?: boolean;
+  hidden?: boolean;
   loadMethod?: string;
   loadConfig?: boolean;
+  loadPreviousNodes?: boolean;
   acceptVariable?: boolean;
   acceptNodeOutputAsVariable?: boolean;
   refresh?: boolean;
   freeSolo?: boolean;
+  list?: boolean;
+  fileType?: string;
+  codeExample?: string;
+  hideCodeExecute?: boolean;
   generateInstruction?: boolean;
   generateDocStoreDescription?: boolean;
-  hideCodeExecute?: boolean;
+  hint?: any;
+  tabIdentifier?: string;
+  datagrid?: any[];
   show?: Record<string, any>;
   hide?: Record<string, any>;
-  options?: Array<{ label: string; name: string; description?: string }>;
-  array?: ParsedInput[]; // Nested inputs for array type
+  options?: Array<{ label: string; name: string; description?: string; imageSrc?: string }>;
+  array?: ParsedInput[];
+  tabs?: ParsedInput[];
   credentialNames?: string[];
 }
 
-function parseInputObject(objContent: string): ParsedInput | null {
+function parseInputObject(objContent: string, fileContent?: string): ParsedInput | null {
   const input: ParsedInput = {
     label: '',
     name: '',
@@ -212,6 +355,21 @@ function parseInputObject(objContent: string): ParsedInput | null {
   const loadMethod = extractStringValue(objContent, 'loadMethod');
   if (loadMethod) input.loadMethod = loadMethod;
 
+  const warning = extractStringValue(objContent, 'warning');
+  if (warning) input.warning = warning;
+
+  const fileType = extractStringValue(objContent, 'fileType');
+  if (fileType) input.fileType = fileType;
+
+  // codeExample can be a string literal or a variable reference
+  const codeExample = fileContent
+    ? extractCodeExample(objContent, fileContent)
+    : extractStringValue(objContent, 'codeExample');
+  if (codeExample) input.codeExample = codeExample;
+
+  const tabIdentifier = extractStringValue(objContent, 'tabIdentifier');
+  if (tabIdentifier) input.tabIdentifier = tabIdentifier;
+
   // Number fields
   const rows = extractNumberValue(objContent, 'rows');
   if (rows) input.rows = rows;
@@ -226,8 +384,14 @@ function parseInputObject(objContent: string): ParsedInput | null {
   const additionalParams = extractBooleanValue(objContent, 'additionalParams');
   if (additionalParams !== null) input.additionalParams = additionalParams;
 
+  const hidden = extractBooleanValue(objContent, 'hidden');
+  if (hidden !== null) input.hidden = hidden;
+
   const loadConfig = extractBooleanValue(objContent, 'loadConfig');
   if (loadConfig !== null) input.loadConfig = loadConfig;
+
+  const loadPreviousNodes = extractBooleanValue(objContent, 'loadPreviousNodes');
+  if (loadPreviousNodes !== null) input.loadPreviousNodes = loadPreviousNodes;
 
   const acceptVariable = extractBooleanValue(objContent, 'acceptVariable');
   if (acceptVariable !== null) input.acceptVariable = acceptVariable;
@@ -240,6 +404,9 @@ function parseInputObject(objContent: string): ParsedInput | null {
 
   const freeSolo = extractBooleanValue(objContent, 'freeSolo');
   if (freeSolo !== null) input.freeSolo = freeSolo;
+
+  const list = extractBooleanValue(objContent, 'list');
+  if (list !== null) input.list = list;
 
   const generateInstruction = extractBooleanValue(objContent, 'generateInstruction');
   if (generateInstruction !== null) input.generateInstruction = generateInstruction;
@@ -266,10 +433,29 @@ function parseInputObject(objContent: string): ParsedInput | null {
   const hide = extractShowHideCondition(objContent, 'hide');
   if (hide) input.hide = hide;
 
-  // Nested array inputs (for type: 'array') - parse BEFORE options
-  // This is important because we need to know if this is an array-type input
-  // before extracting options (array inputs don't have their own options -
-  // their options belong to nested inputs)
+  // Hint (can be object with label/value)
+  const hint = extractHint(objContent);
+  if (hint) input.hint = hint;
+
+  // Datagrid (for datagrid type inputs)
+  if (input.type === 'datagrid') {
+    const datagrid = extractDatagrid(objContent);
+    if (datagrid) input.datagrid = datagrid;
+  }
+
+  // Tabs (for tabs type inputs)
+  const tabsMatch = objContent.match(/\btabs\s*:\s*\[/);
+  if (tabsMatch && input.type === 'tabs') {
+    const tabsResult = extractArrayContent(objContent, tabsMatch.index!);
+    if (tabsResult) {
+      const tabObjects = splitArrayIntoObjects(tabsResult.content);
+      input.tabs = tabObjects
+        .map(obj => parseInputObject(obj))
+        .filter((i): i is ParsedInput => i !== null);
+    }
+  }
+
+  // Nested array inputs (for type: 'array')
   const arrayMatch = objContent.match(/\barray\s*:\s*\[/);
   if (arrayMatch && input.type === 'array') {
     const arrayResult = extractArrayContent(objContent, arrayMatch.index!);
@@ -282,7 +468,6 @@ function parseInputObject(objContent: string): ParsedInput | null {
 
     // For array-type inputs, clear properties that were incorrectly extracted
     // from nested children (since regex matches anywhere in the content)
-    // These properties only make sense for leaf inputs, not array containers
     delete input.rows;
     delete input.placeholder;
     delete input.generateInstruction;
@@ -290,17 +475,17 @@ function parseInputObject(objContent: string): ParsedInput | null {
     delete input.hideCodeExecute;
   }
 
-  // Options array - only for non-array types
-  // For array-type inputs, options belong to the nested inputs, not the parent
+  // Options array - only for non-array and non-tabs types
   const optionsMatch = objContent.match(/options\s*:\s*\[/);
-  if (optionsMatch && input.type !== 'array') {
+  if (optionsMatch && input.type !== 'array' && input.type !== 'tabs') {
     const optionsResult = extractArrayContent(objContent, optionsMatch.index!);
     if (optionsResult) {
       const optionObjects = splitArrayIntoObjects(optionsResult.content);
       input.options = optionObjects.map(opt => ({
         label: extractStringValue(opt, 'label') || '',
         name: extractStringValue(opt, 'name') || '',
-        description: extractStringValue(opt, 'description') || undefined
+        description: extractStringValue(opt, 'description') || undefined,
+        imageSrc: extractStringValue(opt, 'imageSrc') || undefined
       })).filter(o => o.label && o.name);
     }
   }
@@ -321,6 +506,64 @@ function parseInputObject(objContent: string): ParsedInput | null {
 }
 
 // ============================================================================
+// OUTPUT PARSING
+// ============================================================================
+
+interface ParsedOutput {
+  name: string;
+  label: string;
+  baseClasses?: string[];
+  description?: string;
+  hidden?: boolean;
+  isAnchor?: boolean;
+}
+
+function parseOutputObject(objContent: string): ParsedOutput | null {
+  const output: ParsedOutput = {
+    name: extractStringValue(objContent, 'name') || '',
+    label: extractStringValue(objContent, 'label') || ''
+  };
+
+  if (!output.name || !output.label) return null;
+
+  const description = extractStringValue(objContent, 'description');
+  if (description) output.description = description;
+
+  const hidden = extractBooleanValue(objContent, 'hidden');
+  if (hidden !== null) output.hidden = hidden;
+
+  const isAnchor = extractBooleanValue(objContent, 'isAnchor');
+  if (isAnchor !== null) output.isAnchor = isAnchor;
+
+  // Base classes for this specific output
+  const baseClassMatch = objContent.match(/baseClasses\s*:\s*\[/);
+  if (baseClassMatch) {
+    const result = extractArrayContent(objContent, baseClassMatch.index!);
+    if (result) {
+      // Handle this.type references and string literals
+      const classes: string[] = [];
+      if (result.content.includes('this.type')) {
+        // Will be resolved at node level
+        classes.push('__THIS_TYPE__');
+      }
+      const strMatches = result.content.match(/['"`]([^'"`]+)['"`]/g);
+      if (strMatches) {
+        classes.push(...strMatches.map(s => s.replace(/['"`]/g, '')));
+      }
+      // Check for ...getBaseClasses(...) pattern
+      if (result.content.includes('getBaseClasses')) {
+        classes.push('__GET_BASE_CLASSES__');
+      }
+      if (classes.length > 0) {
+        output.baseClasses = classes;
+      }
+    }
+  }
+
+  return output;
+}
+
+// ============================================================================
 // NODE PARSING
 // ============================================================================
 
@@ -332,14 +575,23 @@ interface ParsedNode {
   icon: string;
   category: string;
   description: string;
+  baseClasses: string[];
+  filePath: string;
+  // Display properties
   color?: string;
   hideInput?: boolean;
   hideOutput?: boolean;
   hint?: string;
   documentation?: string;
-  baseClasses: string[];
-  filePath: string;
+  // Metadata (NEW)
+  tags?: string[];
+  badge?: string;
+  deprecateMessage?: string;
+  author?: string;
+  warning?: string;
+  // Relations
   inputs: ParsedInput[];
+  outputs: ParsedOutput[];
   credential?: {
     label: string;
     name: string;
@@ -350,12 +602,15 @@ interface ParsedNode {
 
 function parseNodeFile(filePath: string): ParsedNode | null {
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const rawContent = fs.readFileSync(filePath, 'utf-8');
 
     // Check if this is a node class
-    if (!content.includes('implements INode')) {
+    if (!rawContent.includes('implements INode')) {
       return null;
     }
+
+    // Strip block comments to prevent parsing commented-out options/inputs
+    const content = stripBlockComments(rawContent);
 
     // Extract basic properties
     const name = extractStringValue(content, 'this.name');
@@ -373,10 +628,11 @@ function parseNodeFile(filePath: string): ParsedNode | null {
       description: extractStringValue(content, 'this.description') || '',
       baseClasses: [],
       filePath: path.relative(process.cwd(), filePath),
-      inputs: []
+      inputs: [],
+      outputs: []
     };
 
-    // Agentflow properties
+    // Display properties
     const color = extractStringValue(content, 'this.color');
     if (color) node.color = color;
 
@@ -388,6 +644,31 @@ function parseNodeFile(filePath: string): ParsedNode | null {
 
     const documentation = extractStringValue(content, 'this.documentation');
     if (documentation) node.documentation = documentation;
+
+    // Metadata (NEW fields)
+    const badge = extractStringValue(content, 'this.badge');
+    if (badge) node.badge = badge;
+
+    const deprecateMessage = extractStringValue(content, 'this.deprecateMessage');
+    if (deprecateMessage) node.deprecateMessage = deprecateMessage;
+
+    const author = extractStringValue(content, 'this.author');
+    if (author) node.author = author;
+
+    const warning = extractStringValue(content, 'this.warning');
+    if (warning) node.warning = warning;
+
+    // Tags array
+    const tagsMatch = content.match(/this\.tags\s*=\s*\[/);
+    if (tagsMatch) {
+      const result = extractArrayContent(content, tagsMatch.index!);
+      if (result) {
+        const tagMatches = result.content.match(/['"`]([^'"`]+)['"`]/g);
+        if (tagMatches) {
+          node.tags = tagMatches.map(s => s.replace(/['"`]/g, ''));
+        }
+      }
+    }
 
     // Base classes
     const baseClassMatch = content.match(/this\.baseClasses\s*=\s*\[/);
@@ -414,9 +695,43 @@ function parseNodeFile(filePath: string): ParsedNode | null {
       if (result) {
         const inputObjects = splitArrayIntoObjects(result.content);
         node.inputs = inputObjects
-          .map(obj => parseInputObject(obj))
+          .map(obj => parseInputObject(obj, content))
           .filter((i): i is ParsedInput => i !== null);
       }
+    }
+
+    // Parse outputs (NEW - proper output parsing)
+    const outputsMatch = content.match(/this\.outputs\s*=\s*\[/);
+    if (outputsMatch) {
+      const result = extractArrayContent(content, outputsMatch.index!);
+      if (result) {
+        const outputObjects = splitArrayIntoObjects(result.content);
+        node.outputs = outputObjects
+          .map(obj => {
+            const parsed = parseOutputObject(obj);
+            if (parsed && parsed.baseClasses) {
+              // Resolve __THIS_TYPE__ placeholder
+              parsed.baseClasses = parsed.baseClasses.map(c =>
+                c === '__THIS_TYPE__' ? node.type : c
+              ).filter(c => c !== '__GET_BASE_CLASSES__');
+              // Add baseClasses from getBaseClasses if referenced
+              if (parsed.baseClasses.includes('__GET_BASE_CLASSES__')) {
+                parsed.baseClasses = parsed.baseClasses.filter(c => c !== '__GET_BASE_CLASSES__');
+              }
+            }
+            return parsed;
+          })
+          .filter((o): o is ParsedOutput => o !== null);
+      }
+    }
+
+    // If no outputs defined, create default output
+    if (node.outputs.length === 0) {
+      node.outputs.push({
+        name: node.name,
+        label: node.label,
+        baseClasses: node.baseClasses
+      });
     }
 
     // Parse credential
@@ -468,8 +783,12 @@ function insertNode(db: Database, node: ParsedNode): void {
   const isAgentflow = node.category === 'Agent Flows' ? 1 : 0;
 
   db.run(`
-    INSERT INTO nodes (name, label, version, type, icon, category, description, color, hide_input, hide_output, hint, documentation, base_classes, file_path, is_agentflow)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO nodes (
+      name, label, version, type, icon, category, description, base_classes, file_path, is_agentflow,
+      color, hide_input, hide_output, hint, documentation,
+      tags, badge, deprecate_message, author, warning
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     node.name,
     node.label,
@@ -478,14 +797,19 @@ function insertNode(db: Database, node: ParsedNode): void {
     node.icon,
     node.category,
     node.description,
+    JSON.stringify(node.baseClasses),
+    node.filePath,
+    isAgentflow,
     node.color || null,
     node.hideInput ? 1 : 0,
     node.hideOutput ? 1 : 0,
     node.hint || null,
     node.documentation || null,
-    JSON.stringify(node.baseClasses),
-    node.filePath,
-    isAgentflow
+    node.tags ? JSON.stringify(node.tags) : null,
+    node.badge || null,
+    node.deprecateMessage || null,
+    node.author || null,
+    node.warning || null
   ]);
 
   // Insert credential
@@ -502,18 +826,26 @@ function insertNode(db: Database, node: ParsedNode): void {
     ]);
   }
 
-  // Insert output
-  db.run(`
-    INSERT INTO node_outputs (node_name, output_name, output_label, output_type)
-    VALUES (?, ?, ?, ?)
-  `, [
-    node.name,
-    node.name,
-    node.label,
-    isAgentflow ? null : node.baseClasses.join('|')
-  ]);
+  // Insert outputs (NEW - proper output handling)
+  let outputSort = 0;
+  for (const output of node.outputs) {
+    db.run(`
+      INSERT INTO node_outputs (node_name, output_name, output_label, output_type, base_classes, description, is_hidden, is_anchor, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      node.name,
+      output.name,
+      output.label,
+      isAgentflow ? null : (output.baseClasses ? output.baseClasses.join('|') : node.baseClasses.join('|')),
+      output.baseClasses ? JSON.stringify(output.baseClasses) : JSON.stringify(node.baseClasses),
+      output.description || null,
+      output.hidden ? 1 : 0,
+      output.isAnchor ? 1 : 0,
+      outputSort++
+    ]);
+  }
 
-  // Insert inputs (with nested array support)
+  // Insert inputs (with nested array and tabs support)
   function insertInputs(inputs: ParsedInput[], parentId: number | null, sortStart: number): void {
     let sortOrder = sortStart;
 
@@ -521,11 +853,12 @@ function insertNode(db: Database, node: ParsedNode): void {
       db.run(`
         INSERT INTO node_inputs (
           node_name, parent_id, input_name, input_label, input_type,
-          description, placeholder, rows, step, default_value, is_optional, is_additional_params,
-          load_method, load_config, accept_variable, accept_node_output,
-          refresh, free_solo, generate_instruction, generate_doc_store_desc, hide_code_execute,
+          description, placeholder, rows, warning, default_value, is_optional, is_additional_params, is_hidden,
+          load_method, load_config, load_previous_nodes, accept_variable, accept_node_output,
+          refresh, free_solo, is_list, step, file_type, code_example, hide_code_execute,
+          generate_instruction, generate_doc_store_desc, hint, tab_identifier, datagrid,
           show_condition, hide_condition, sort_order
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         node.name,
         parentId,
@@ -535,19 +868,28 @@ function insertNode(db: Database, node: ParsedNode): void {
         input.description || null,
         input.placeholder || null,
         input.rows || null,
-        input.step !== undefined ? input.step : null,
+        input.warning || null,
         input.default !== undefined ? String(input.default) : null,
         input.optional ? 1 : 0,
         input.additionalParams ? 1 : 0,
+        input.hidden ? 1 : 0,
         input.loadMethod || null,
         input.loadConfig ? 1 : 0,
+        input.loadPreviousNodes ? 1 : 0,
         input.acceptVariable ? 1 : 0,
         input.acceptNodeOutputAsVariable ? 1 : 0,
         input.refresh ? 1 : 0,
         input.freeSolo ? 1 : 0,
+        input.list ? 1 : 0,
+        input.step !== undefined ? input.step : null,
+        input.fileType || null,
+        input.codeExample || null,
+        input.hideCodeExecute ? 1 : 0,
         input.generateInstruction ? 1 : 0,
         input.generateDocStoreDescription ? 1 : 0,
-        input.hideCodeExecute ? 1 : 0,
+        input.hint ? JSON.stringify(input.hint) : null,
+        input.tabIdentifier || null,
+        input.datagrid ? JSON.stringify(input.datagrid) : null,
         input.show ? JSON.stringify(input.show) : null,
         input.hide ? JSON.stringify(input.hide) : null,
         sortOrder++
@@ -562,15 +904,20 @@ function insertNode(db: Database, node: ParsedNode): void {
         let optSort = 0;
         for (const opt of input.options) {
           db.run(`
-            INSERT INTO input_options (input_id, option_label, option_name, option_description, sort_order)
-            VALUES (?, ?, ?, ?, ?)
-          `, [inputId, opt.label, opt.name, opt.description || null, optSort++]);
+            INSERT INTO input_options (input_id, option_label, option_name, option_description, image_src, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [inputId, opt.label, opt.name, opt.description || null, opt.imageSrc || null, optSort++]);
         }
       }
 
       // Insert nested array inputs
       if (input.array && input.array.length > 0) {
         insertInputs(input.array, inputId, 0);
+      }
+
+      // Insert nested tabs inputs (NEW)
+      if (input.tabs && input.tabs.length > 0) {
+        insertInputs(input.tabs, inputId, 0);
       }
     }
   }
@@ -583,8 +930,8 @@ function insertNode(db: Database, node: ParsedNode): void {
 // ============================================================================
 
 async function main(): Promise<void> {
-  console.log('DS-MCP-FLOWISE Node Extraction V2\n');
-  console.log('Using bracket-matching parser for nested structures\n');
+  console.log('DS-MCP-FLOWISE Node Extraction V2 (Complete)\n');
+  console.log('Capturing ALL fields from INodeProperties, INodeParams, INodeOutputsValue\n');
 
   // Find all node files
   const nodeFiles = await glob('**/*.ts', { cwd: NODES_PATH, absolute: true });
@@ -637,7 +984,12 @@ async function main(): Promise<void> {
       (SELECT COUNT(*) FROM node_inputs WHERE parent_id IS NULL) as top_inputs,
       (SELECT COUNT(*) FROM node_inputs WHERE parent_id IS NOT NULL) as nested_inputs,
       (SELECT COUNT(*) FROM input_options) as options,
-      (SELECT COUNT(*) FROM nodes WHERE is_agentflow = 1) as agentflow_nodes
+      (SELECT COUNT(*) FROM node_outputs) as outputs,
+      (SELECT COUNT(*) FROM nodes WHERE is_agentflow = 1) as agentflow_nodes,
+      (SELECT COUNT(*) FROM nodes WHERE badge IS NOT NULL) as nodes_with_badge,
+      (SELECT COUNT(*) FROM nodes WHERE tags IS NOT NULL) as nodes_with_tags,
+      (SELECT COUNT(*) FROM node_inputs WHERE is_list = 1) as list_inputs,
+      (SELECT COUNT(*) FROM node_inputs WHERE file_type IS NOT NULL) as file_inputs
   `)[0].values[0];
 
   console.log('\nDatabase stats:');
@@ -645,7 +997,12 @@ async function main(): Promise<void> {
   console.log(`  Top-level inputs: ${stats[1]}`);
   console.log(`  Nested inputs: ${stats[2]}`);
   console.log(`  Input options: ${stats[3]}`);
-  console.log(`  Agentflow nodes: ${stats[4]}`);
+  console.log(`  Outputs: ${stats[4]}`);
+  console.log(`  Agentflow nodes: ${stats[5]}`);
+  console.log(`  Nodes with badge: ${stats[6]}`);
+  console.log(`  Nodes with tags: ${stats[7]}`);
+  console.log(`  List inputs: ${stats[8]}`);
+  console.log(`  File inputs: ${stats[9]}`);
 
   console.log(`\nDatabase saved to: ${DB_PATH}`);
 
