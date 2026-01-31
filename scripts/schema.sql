@@ -86,6 +86,9 @@ CREATE TABLE node_inputs (
     refresh INTEGER DEFAULT 0,              -- boolean: refresh on dependency change
     free_solo INTEGER DEFAULT 0,            -- boolean: allow custom values
 
+    -- Number input specifics
+    step REAL,                              -- step value for number inputs (e.g., 0.1)
+
     -- Special generators
     generate_instruction INTEGER DEFAULT 0, -- boolean: show generate instruction button
     generate_doc_store_desc INTEGER DEFAULT 0, -- boolean: show generate doc store description

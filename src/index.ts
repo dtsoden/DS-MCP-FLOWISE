@@ -1023,8 +1023,14 @@ function getNodeSchema(name: string): string {
     // Text area rows
     if (input.rows) param.rows = input.rows;
 
+    // Step for number inputs
+    if (input.step) param.step = input.step;
+
     // Placeholder
     if (input.placeholder) param.placeholder = input.placeholder;
+
+    // Additional params section
+    if (input.is_additional_params) param.additionalParams = true;
 
     // Get options from input_options table
     const options = query(`
@@ -1085,6 +1091,19 @@ function getNodeSchema(name: string): string {
   // Types that are UI parameters (not connection anchors)
   const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'multiOptions', 'asyncOptions', 'json', 'code', 'file', 'credential', 'array'];
 
+  // Add credential as FIRST inputParam if exists (this is how Flowise UI does it)
+  if (credential) {
+    const credParam: any = {
+      label: credential.label,
+      name: credential.name,
+      type: 'credential',
+      credentialNames: credential.credential_names ? JSON.parse(credential.credential_names) : [],
+      id: `${nodeId}-input-credential-credential`,
+      display: true
+    };
+    inputParams.push(credParam);
+  }
+
   for (const input of topInputs) {
     const param = buildInputParam(input, nodeId);
     inputParams.push(param);
@@ -1139,6 +1158,9 @@ function getNodeSchema(name: string): string {
     }];
   }
 
+  // Build icon path (matches Flowise UI exactly)
+  const iconPath = node.icon ? node.file_path.replace(/\\/g, '/').replace('flowise-source/packages/components/', '/usr/src/flowise/packages/server/node_modules/flowise-components/dist/').replace(/\/[^\/]+\.ts$/, '/' + node.icon) : null;
+
   // Build the data object (matches Flowise UI exactly)
   const data: any = {
     loadMethods: {},  // Flowise UI includes this empty object
@@ -1146,10 +1168,11 @@ function getNodeSchema(name: string): string {
     name: name,
     version: node.version,
     type: node.type,
+    icon: iconPath,
     category: node.category,
     description: node.description,
-    color: node.color,
     baseClasses: baseClasses,
+    credential: credential ? '' : undefined,  // Empty string when node has credential, matches UI
     inputs: inputsObj,
     filePath: node.file_path ? node.file_path.replace(/\\/g, '/').replace('flowise-source/packages/components/', '/usr/src/flowise/packages/server/node_modules/flowise-components/dist/').replace('.ts', '.js') : null,
     inputAnchors: isAgentFlow ? [] : inputAnchors,
@@ -1160,14 +1183,9 @@ function getNodeSchema(name: string): string {
     selected: false
   };
 
-  // Add credential if exists
-  if (credential) {
-    data.credential = {
-      label: credential.label,
-      name: credential.name,
-      type: credential.type,
-      credentialNames: credential.credential_names ? JSON.parse(credential.credential_names) : []
-    };
+  // Add color only for agentflow nodes
+  if (node.color) {
+    data.color = node.color;
   }
 
   // Agentflow-specific properties

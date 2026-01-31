@@ -168,6 +168,7 @@ interface ParsedInput {
   description?: string;
   placeholder?: string;
   rows?: number;
+  step?: number;  // step value for number inputs
   default?: any;
   optional?: boolean;
   additionalParams?: boolean;
@@ -214,6 +215,9 @@ function parseInputObject(objContent: string): ParsedInput | null {
   // Number fields
   const rows = extractNumberValue(objContent, 'rows');
   if (rows) input.rows = rows;
+
+  const step = extractNumberValue(objContent, 'step');
+  if (step !== null) input.step = step;
 
   // Boolean fields
   const optional = extractBooleanValue(objContent, 'optional');
@@ -517,11 +521,11 @@ function insertNode(db: Database, node: ParsedNode): void {
       db.run(`
         INSERT INTO node_inputs (
           node_name, parent_id, input_name, input_label, input_type,
-          description, placeholder, rows, default_value, is_optional, is_additional_params,
+          description, placeholder, rows, step, default_value, is_optional, is_additional_params,
           load_method, load_config, accept_variable, accept_node_output,
           refresh, free_solo, generate_instruction, generate_doc_store_desc, hide_code_execute,
           show_condition, hide_condition, sort_order
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         node.name,
         parentId,
@@ -531,6 +535,7 @@ function insertNode(db: Database, node: ParsedNode): void {
         input.description || null,
         input.placeholder || null,
         input.rows || null,
+        input.step !== undefined ? input.step : null,
         input.default !== undefined ? String(input.default) : null,
         input.optional ? 1 : 0,
         input.additionalParams ? 1 : 0,
