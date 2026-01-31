@@ -19,6 +19,15 @@ interface NodeInput {
   default?: any;
   options?: Array<{ label: string; name: string; description?: string }>;
   additionalParams?: boolean;
+  // Agentflow-specific input properties
+  show?: Record<string, any>;
+  hide?: Record<string, any>;
+  acceptVariable?: boolean;
+  acceptNodeOutputAsVariable?: boolean;
+  loadConfig?: boolean;
+  refresh?: boolean;
+  freeSolo?: boolean;
+  array?: NodeInput[];
 }
 
 interface ExtractedNode {
@@ -33,6 +42,12 @@ interface ExtractedNode {
   credential?: any;
   inputs: NodeInput[];
   filePath: string;
+  // Agentflow-specific node properties
+  color?: string;
+  hideInput?: boolean;
+  hideOutput?: boolean;
+  hint?: string;
+  tags?: string[];
 }
 
 interface MarketplaceTemplate {
@@ -62,7 +77,13 @@ async function createDatabase(): Promise<Database> {
       description TEXT,
       base_classes TEXT,
       credential TEXT,
-      file_path TEXT
+      file_path TEXT,
+      -- Agentflow-specific columns
+      color TEXT,
+      hide_input INTEGER DEFAULT 0,
+      hide_output INTEGER DEFAULT 0,
+      hint TEXT,
+      tags TEXT
     );
 
     -- Node inputs table
@@ -77,6 +98,14 @@ async function createDatabase(): Promise<Database> {
       default_value TEXT,
       options TEXT,
       additional_params INTEGER DEFAULT 0,
+      -- Agentflow-specific input columns
+      show_condition TEXT,
+      hide_condition TEXT,
+      accept_variable INTEGER DEFAULT 0,
+      accept_node_output INTEGER DEFAULT 0,
+      load_config INTEGER DEFAULT 0,
+      refresh INTEGER DEFAULT 0,
+      free_solo INTEGER DEFAULT 0,
       FOREIGN KEY (node_name) REFERENCES nodes(name)
     );
 
@@ -127,8 +156,8 @@ function populateDatabase(db: Database) {
     categories.add(node.category);
 
     db.run(
-      `INSERT INTO nodes (name, label, version, type, icon, category, description, base_classes, credential, file_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO nodes (name, label, version, type, icon, category, description, base_classes, credential, file_path, color, hide_input, hide_output, hint, tags)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         node.name,
         node.label,
@@ -139,15 +168,20 @@ function populateDatabase(db: Database) {
         node.description,
         JSON.stringify(node.baseClasses),
         node.credential ? JSON.stringify(node.credential) : null,
-        node.filePath
+        node.filePath,
+        node.color || null,
+        node.hideInput ? 1 : 0,
+        node.hideOutput ? 1 : 0,
+        node.hint || null,
+        node.tags ? JSON.stringify(node.tags) : null
       ]
     );
 
     // Insert inputs
     for (const input of node.inputs) {
       db.run(
-        `INSERT INTO node_inputs (node_name, input_name, input_label, input_type, description, optional, default_value, options, additional_params)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO node_inputs (node_name, input_name, input_label, input_type, description, optional, default_value, options, additional_params, show_condition, hide_condition, accept_variable, accept_node_output, load_config, refresh, free_solo)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           node.name,
           input.name,
@@ -157,7 +191,14 @@ function populateDatabase(db: Database) {
           input.optional ? 1 : 0,
           input.default !== undefined ? String(input.default) : null,
           input.options ? JSON.stringify(input.options) : null,
-          input.additionalParams ? 1 : 0
+          input.additionalParams ? 1 : 0,
+          input.show ? JSON.stringify(input.show) : null,
+          input.hide ? JSON.stringify(input.hide) : null,
+          input.acceptVariable ? 1 : 0,
+          input.acceptNodeOutputAsVariable ? 1 : 0,
+          input.loadConfig ? 1 : 0,
+          input.refresh ? 1 : 0,
+          input.freeSolo ? 1 : 0
         ]
       );
     }

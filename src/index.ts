@@ -122,6 +122,202 @@ function queryOne(sql: string, params: any[] = []): any | null {
   return results.length > 0 ? results[0] : null;
 }
 
+// =============================================================================
+// TYPE HIERARCHY FOR EDGE COMPATIBILITY
+// =============================================================================
+// This maps Flowise types to their parent classes for edge compatibility checking.
+// When an input expects "BaseChatModel", any type that has BaseChatModel in its
+// hierarchy can connect (e.g., ChatOpenAI, ChatAnthropic, etc.)
+
+const TYPE_HIERARCHY: Record<string, string[]> = {
+  // Chat Models - all extend BaseChatModel
+  'ChatOpenAI': ['ChatOpenAI', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'ChatAnthropic': ['ChatAnthropic', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'AzureChatOpenAI': ['AzureChatOpenAI', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'ChatGoogleGenerativeAI': ['ChatGoogleGenerativeAI', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'ChatOllama': ['ChatOllama', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'ChatMistralAI': ['ChatMistralAI', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'ChatTogetherAI': ['ChatTogetherAI', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'ChatGroq': ['ChatGroq', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'ChatCohere': ['ChatCohere', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'ChatHuggingFace': ['ChatHuggingFace', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'AwsChatBedrock': ['AwsChatBedrock', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+  'ChatLocalAI': ['ChatLocalAI', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+
+  // LLMs - extend BaseLLM
+  'OpenAI': ['OpenAI', 'BaseLLM', 'BaseLanguageModel', 'Runnable'],
+  'AzureOpenAI': ['AzureOpenAI', 'BaseLLM', 'BaseLanguageModel', 'Runnable'],
+  'Ollama': ['Ollama', 'BaseLLM', 'BaseLanguageModel', 'Runnable'],
+  'Replicate': ['Replicate', 'BaseLLM', 'BaseLanguageModel', 'Runnable'],
+
+  // Memory types
+  'BufferMemory': ['BufferMemory', 'BaseChatMemory', 'BaseMemory'],
+  'BufferWindowMemory': ['BufferWindowMemory', 'BaseChatMemory', 'BaseMemory'],
+  'ConversationSummaryMemory': ['ConversationSummaryMemory', 'BaseChatMemory', 'BaseMemory'],
+  'ConversationSummaryBufferMemory': ['ConversationSummaryBufferMemory', 'BaseChatMemory', 'BaseMemory'],
+  'ZepMemory': ['ZepMemory', 'BaseChatMemory', 'BaseMemory'],
+  'RedisBackedChatMemory': ['RedisBackedChatMemory', 'BaseChatMemory', 'BaseMemory'],
+  'DynamoDBChatMemory': ['DynamoDBChatMemory', 'BaseChatMemory', 'BaseMemory'],
+  'MotorheadMemory': ['MotorheadMemory', 'BaseChatMemory', 'BaseMemory'],
+  'UpstashRedisBackedChatMemory': ['UpstashRedisBackedChatMemory', 'BaseChatMemory', 'BaseMemory'],
+  'MongoDBChatMemory': ['MongoDBChatMemory', 'BaseChatMemory', 'BaseMemory'],
+
+  // Embeddings
+  'OpenAIEmbeddings': ['OpenAIEmbeddings', 'Embeddings'],
+  'AzureOpenAIEmbeddings': ['AzureOpenAIEmbeddings', 'Embeddings'],
+  'CohereEmbeddings': ['CohereEmbeddings', 'Embeddings'],
+  'GoogleGenerativeAIEmbeddings': ['GoogleGenerativeAIEmbeddings', 'Embeddings'],
+  'HuggingFaceInferenceEmbeddings': ['HuggingFaceInferenceEmbeddings', 'Embeddings'],
+  'OllamaEmbeddings': ['OllamaEmbeddings', 'Embeddings'],
+  'VoyageAIEmbeddings': ['VoyageAIEmbeddings', 'Embeddings'],
+  'MistralAIEmbeddings': ['MistralAIEmbeddings', 'Embeddings'],
+  'TogetherAIEmbeddings': ['TogetherAIEmbeddings', 'Embeddings'],
+
+  // Vector Stores
+  'Pinecone': ['Pinecone', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Chroma': ['Chroma', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Qdrant': ['Qdrant', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Milvus': ['Milvus', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Weaviate': ['Weaviate', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Supabase': ['Supabase', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Postgres': ['Postgres', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Redis': ['Redis', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Faiss': ['Faiss', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'InMemoryVectorStore': ['InMemoryVectorStore', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'MongoDBAtlas': ['MongoDBAtlas', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Elasticsearch': ['Elasticsearch', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'OpenSearch': ['OpenSearch', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Upstash': ['Upstash', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'Vectara': ['Vectara', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+  'SingleStore': ['SingleStore', 'VectorStore', 'VectorStoreRetriever', 'BaseRetriever'],
+
+  // Document Loaders
+  'PdfLoader': ['PdfLoader', 'Document'],
+  'TextLoader': ['TextLoader', 'Document'],
+  'JsonLoader': ['JsonLoader', 'Document'],
+  'CsvLoader': ['CsvLoader', 'Document'],
+  'DocxLoader': ['DocxLoader', 'Document'],
+  'CheerioWebScraper': ['CheerioWebScraper', 'Document'],
+  'PlaywrightWebScraper': ['PlaywrightWebScraper', 'Document'],
+  'PuppeteerWebScraper': ['PuppeteerWebScraper', 'Document'],
+  'GithubRepoLoader': ['GithubRepoLoader', 'Document'],
+  'NotionLoader': ['NotionLoader', 'Document'],
+  'ConfluenceLoader': ['ConfluenceLoader', 'Document'],
+  'S3Loader': ['S3Loader', 'Document'],
+  'FireCrawlLoader': ['FireCrawlLoader', 'Document'],
+
+  // Text Splitters
+  'RecursiveCharacterTextSplitter': ['RecursiveCharacterTextSplitter', 'TextSplitter'],
+  'CharacterTextSplitter': ['CharacterTextSplitter', 'TextSplitter'],
+  'TokenTextSplitter': ['TokenTextSplitter', 'TextSplitter'],
+  'MarkdownTextSplitter': ['MarkdownTextSplitter', 'TextSplitter'],
+  'HtmlToMarkdownTextSplitter': ['HtmlToMarkdownTextSplitter', 'TextSplitter'],
+  'CodeTextSplitter': ['CodeTextSplitter', 'TextSplitter'],
+
+  // Tools
+  'Calculator': ['Calculator', 'Tool', 'StructuredTool', 'BaseTool'],
+  'GoogleSearchAPI': ['GoogleSearchAPI', 'Tool', 'StructuredTool', 'BaseTool'],
+  'SerpAPI': ['SerpAPI', 'Tool', 'StructuredTool', 'BaseTool'],
+  'BraveSearchAPI': ['BraveSearchAPI', 'Tool', 'StructuredTool', 'BaseTool'],
+  'RequestsGet': ['RequestsGet', 'Tool', 'StructuredTool', 'BaseTool'],
+  'RequestsPost': ['RequestsPost', 'Tool', 'StructuredTool', 'BaseTool'],
+  'Retriever': ['Retriever', 'Tool', 'StructuredTool', 'BaseTool'],
+  'ChainTool': ['ChainTool', 'Tool', 'StructuredTool', 'BaseTool'],
+  'CustomTool': ['CustomTool', 'Tool', 'StructuredTool', 'BaseTool'],
+  'OpenAPIToolkit': ['OpenAPIToolkit', 'Tool', 'StructuredTool', 'BaseTool'],
+  'ReadFile': ['ReadFile', 'Tool', 'StructuredTool', 'BaseTool'],
+  'WriteFile': ['WriteFile', 'Tool', 'StructuredTool', 'BaseTool'],
+
+  // Chains
+  'ConversationChain': ['ConversationChain', 'BaseChain', 'Runnable'],
+  'LLMChain': ['LLMChain', 'BaseChain', 'Runnable'],
+  'ConversationalRetrievalQAChain': ['ConversationalRetrievalQAChain', 'BaseChain', 'Runnable'],
+  'RetrievalQAChain': ['RetrievalQAChain', 'BaseChain', 'Runnable'],
+  'MultiPromptChain': ['MultiPromptChain', 'BaseChain', 'Runnable'],
+  'VectorDBQAChain': ['VectorDBQAChain', 'BaseChain', 'Runnable'],
+  'SqlDatabaseChain': ['SqlDatabaseChain', 'BaseChain', 'Runnable'],
+  'APIChain': ['APIChain', 'BaseChain', 'Runnable'],
+
+  // Agents
+  'OpenAIFunctionsAgent': ['OpenAIFunctionsAgent', 'AgentExecutor', 'BaseChain', 'Runnable'],
+  'ConversationalAgent': ['ConversationalAgent', 'AgentExecutor', 'BaseChain', 'Runnable'],
+  'MRKLAgent': ['MRKLAgent', 'AgentExecutor', 'BaseChain', 'Runnable'],
+  'OpenAIAssistant': ['OpenAIAssistant', 'AgentExecutor', 'BaseChain', 'Runnable'],
+  'ToolAgent': ['ToolAgent', 'AgentExecutor', 'BaseChain', 'Runnable'],
+  'CSVAgent': ['CSVAgent', 'AgentExecutor', 'BaseChain', 'Runnable'],
+  'AutoGPT': ['AutoGPT', 'AgentExecutor', 'BaseChain', 'Runnable'],
+  'BabyAGI': ['BabyAGI', 'AgentExecutor', 'BaseChain', 'Runnable'],
+
+  // AgentFlow nodes
+  'Agent': ['Agent'],
+  'LLMNode': ['LLMNode'],
+  'Condition': ['Condition'],
+  'Start': ['Start'],
+  'End': ['End'],
+  'Loop': ['Loop'],
+  'ConditionAgent': ['ConditionAgent'],
+  'CustomFunction': ['CustomFunction'],
+  'IterationAgent': ['IterationAgent'],
+  'ExecuteFlow': ['ExecuteFlow'],
+  'HumanInput': ['HumanInput'],
+
+  // Prompts
+  'PromptTemplate': ['PromptTemplate', 'BasePromptTemplate'],
+  'ChatPromptTemplate': ['ChatPromptTemplate', 'BasePromptTemplate'],
+  'FewShotPromptTemplate': ['FewShotPromptTemplate', 'BasePromptTemplate'],
+
+  // Output Parsers
+  'StructuredOutputParser': ['StructuredOutputParser', 'BaseOutputParser'],
+  'CustomListOutputParser': ['CustomListOutputParser', 'BaseOutputParser'],
+  'CSVOutputParser': ['CSVOutputParser', 'BaseOutputParser'],
+
+  // Moderation
+  'OpenAIModerationChain': ['OpenAIModerationChain', 'Moderation'],
+  'SimplePromptModeration': ['SimplePromptModeration', 'Moderation'],
+
+  // Cache
+  'InMemoryCache': ['InMemoryCache', 'BaseCache'],
+  'RedisCache': ['RedisCache', 'BaseCache'],
+  'MomentoCache': ['MomentoCache', 'BaseCache'],
+  'UpstashRedisCache': ['UpstashRedisCache', 'BaseCache'],
+};
+
+// Check if a source type can connect to a target input type
+function isTypeCompatible(sourceType: string, targetInputType: string): boolean {
+  // Direct match
+  if (sourceType === targetInputType) return true;
+
+  // Check if source type has target in its hierarchy
+  const sourceHierarchy = TYPE_HIERARCHY[sourceType];
+  if (sourceHierarchy && sourceHierarchy.includes(targetInputType)) return true;
+
+  // For generic base types, check if they're in the source's hierarchy
+  // This handles cases where the database has a specific type but accepts any of its parent types
+  return false;
+}
+
+// Get all types compatible with a given input type
+function getCompatibleOutputTypes(inputType: string): string[] {
+  const compatible: string[] = [inputType]; // Always compatible with itself
+
+  for (const [type, hierarchy] of Object.entries(TYPE_HIERARCHY)) {
+    if (hierarchy.includes(inputType)) {
+      compatible.push(type);
+    }
+  }
+
+  return [...new Set(compatible)];
+}
+
+// Get all input types that a given output type can connect to
+function getAcceptingInputTypes(outputType: string): string[] {
+  const hierarchy = TYPE_HIERARCHY[outputType];
+  if (hierarchy) {
+    return hierarchy; // Can connect to any type in its hierarchy
+  }
+  return [outputType]; // Only direct match if not in hierarchy
+}
+
 // Load nodes data for edge generation
 let nodesData: any[] = [];
 
@@ -167,28 +363,54 @@ function createFlowiseEdge(
     };
   }
 
-  // Get source output info (baseClasses) - use type (PascalCase) as first element
-  const sourceBaseClasses = sourceNode.baseClasses || [sourceNode.type || sourceNode.name];
-  const sourceTypeChain = sourceBaseClasses.join('|');
-  const sourceHandle = `${sourceNodeId}-output-${sourceNode.name}-${sourceTypeChain}`;
+  // Check if this is an agentflow connection (both nodes in "Agent Flows" category)
+  const isAgentFlow = sourceNode.category === 'Agent Flows' && targetNode.category === 'Agent Flows';
 
-  // Get target input info
-  const targetInput = targetNode.inputs?.find((i: any) => i.name === targetInputName);
-  const targetType = targetInput?.type || sourceBaseClasses[0];
-  const targetHandle = `${targetNodeId}-input-${targetInputName}-${targetType}`;
+  if (isAgentFlow) {
+    // Agentflow edge format
+    const sourceHandle = `${sourceNodeId}-output-${sourceNode.name}`;
+    const targetHandle = targetNodeId;  // Just the node ID for agentflow
 
-  // Edge ID format: {sourceNodeId}-{sourceHandle}-{targetNodeId}-{targetHandle}
-  const edgeId = `${sourceNodeId}-${sourceHandle}-${targetNodeId}-${targetHandle}`;
+    const edgeId = `${sourceNodeId}-${sourceHandle}-${targetNodeId}-${targetHandle}`;
 
-  return {
-    source: sourceNodeId,
-    sourceHandle,
-    target: targetNodeId,
-    targetHandle,
-    type: 'buttonedge',
-    id: edgeId,
-    data: { label: '' }
-  };
+    return {
+      source: sourceNodeId,
+      sourceHandle,
+      target: targetNodeId,
+      targetHandle,
+      type: 'agentFlow',
+      id: edgeId,
+      data: {
+        sourceColor: sourceNode.color || '#666666',
+        targetColor: targetNode.color || '#666666',
+        isHumanInput: sourceNode.name === 'humanInputAgentflow'
+      }
+    };
+  } else {
+    // Chatflow edge format (original logic)
+    // Get source output info (baseClasses) - use type (PascalCase) as first element
+    const sourceBaseClasses = sourceNode.baseClasses || [sourceNode.type || sourceNode.name];
+    const sourceTypeChain = sourceBaseClasses.join('|');
+    const sourceHandle = `${sourceNodeId}-output-${sourceNode.name}-${sourceTypeChain}`;
+
+    // Get target input info
+    const targetInput = targetNode.inputs?.find((i: any) => i.name === targetInputName);
+    const targetType = targetInput?.type || sourceBaseClasses[0];
+    const targetHandle = `${targetNodeId}-input-${targetInputName}-${targetType}`;
+
+    // Edge ID format: {sourceNodeId}-{sourceHandle}-{targetNodeId}-{targetHandle}
+    const edgeId = `${sourceNodeId}-${sourceHandle}-${targetNodeId}-${targetHandle}`;
+
+    return {
+      source: sourceNodeId,
+      sourceHandle,
+      target: targetNodeId,
+      targetHandle,
+      type: 'buttonedge',
+      id: edgeId,
+      data: { label: '' }
+    };
+  }
 }
 
 // Create a proper Flowise node with all required fields
@@ -224,6 +446,8 @@ function createFlowiseNode(
     };
   }
 
+  const isAgentFlow = nodeInfo.category === 'Agent Flows';
+
   // Separate inputs into params (string/number/boolean/asyncOptions) and anchors (node connections)
   const inputParams: any[] = [];
   const inputAnchors: any[] = [];
@@ -232,24 +456,27 @@ function createFlowiseNode(
   // Types that are parameters (not connection anchors)
   // IMPORTANT: 'credential' must be in paramTypes - credentials appear in inputParams, not inputAnchors
   // IMPORTANT: 'multiOptions' must be in paramTypes - it's a multi-select UI field, not a node connection
-  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'multiOptions', 'asyncOptions', 'json', 'code', 'file', 'credential'];
+  // For agentflow: 'array' is also a param type
+  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'multiOptions', 'asyncOptions', 'json', 'code', 'file', 'credential', 'array'];
 
   // Handle credential field if it exists (defined separately from inputs in Flowise)
   if (nodeInfo.credential) {
-    inputParams.push({
+    const credParam: any = {
       label: nodeInfo.credential.label || 'Connect Credential',
       name: nodeInfo.credential.name || 'credential',
       type: 'credential',
       credentialNames: nodeInfo.credential.credentialNames || [],
       id: `${id}-input-credential-credential`
-    });
+    };
+    if (isAgentFlow) credParam.display = true;
+    inputParams.push(credParam);
   }
 
   for (const input of (nodeInfo.inputs || [])) {
     const isAnchor = !paramTypes.includes(input.type);
 
-    if (isAnchor) {
-      // This is a connection anchor
+    if (isAnchor && !isAgentFlow) {
+      // This is a connection anchor (only for chatflow nodes)
       inputAnchors.push({
         label: input.label || input.name,
         name: input.name,
@@ -260,8 +487,8 @@ function createFlowiseNode(
       });
       inputs[input.name] = inputValues[input.name] || '';
     } else {
-      // This is a parameter
-      inputParams.push({
+      // This is a parameter (or all inputs for agentflow)
+      const param: any = {
         label: input.label || input.name,
         name: input.name,
         type: input.type,
@@ -269,55 +496,90 @@ function createFlowiseNode(
         default: input.default,
         placeholder: input.placeholder || '',
         id: `${id}-input-${input.name}-${input.type}`
-      });
+      };
+
+      // Agentflow-specific properties
+      if (isAgentFlow) {
+        param.display = true;
+        if (input.show) param.show = input.show;
+        if (input.hide) param.hide = input.hide;
+      }
+
+      inputParams.push(param);
       inputs[input.name] = inputValues[input.name] !== undefined
         ? inputValues[input.name]
         : (input.default !== undefined ? input.default : '');
     }
   }
 
-  // Build output anchors from baseClasses - use type (PascalCase) as first element if available
+  // Build output anchors - different format for agentflow vs chatflow
   const baseClasses = nodeInfo.baseClasses || [nodeInfo.type || nodeInfo.name];
   const typeChain = baseClasses.join('|');
-  const outputAnchors: any[] = [{
-    name: 'output',
-    label: 'Output',
-    type: 'options',
-    options: [{
-      id: `${id}-output-${nodeInfo.name}-${typeChain}`,
+  let outputAnchors: any[];
+
+  if (isAgentFlow) {
+    // Agentflow outputAnchors: simpler format
+    outputAnchors = [{
+      id: `${id}-output-${nodeInfo.name}`,
       name: nodeInfo.name,
-      label: nodeInfo.label || nodeInfo.name,
-      type: typeChain
-    }],
-    default: nodeInfo.name
-  }];
+      label: nodeInfo.label || nodeInfo.name
+    }];
+  } else {
+    // Chatflow outputAnchors
+    outputAnchors = [{
+      name: 'output',
+      label: 'Output',
+      type: 'options',
+      options: [{
+        id: `${id}-output-${nodeInfo.name}-${typeChain}`,
+        name: nodeInfo.name,
+        label: nodeInfo.label || nodeInfo.name,
+        type: typeChain
+      }],
+      default: nodeInfo.name
+    }];
+  }
 
   const data: any = {
     id,
     label: nodeInfo.label || nodeType,
     version: nodeInfo.version || 1,
     name: nodeInfo.name,
-    type: nodeInfo.type || nodeInfo.name,  // Use type (PascalCase) not name
+    type: nodeInfo.type || nodeInfo.name,
     baseClasses,
     category: nodeInfo.category || '',
     description: nodeInfo.description || '',
     inputParams,
-    inputAnchors,
+    inputAnchors: isAgentFlow ? [] : inputAnchors,
     inputs,
     outputAnchors,
-    outputs: { output: nodeInfo.name },
+    outputs: isAgentFlow ? {} : { output: nodeInfo.name },
     selected: false
   };
 
-  return {
+  // Add agentflow-specific data properties
+  if (isAgentFlow) {
+    if (nodeInfo.color) data.color = nodeInfo.color;
+    if (nodeInfo.hideInput) data.hideInput = true;
+    if (nodeInfo.hideOutput) data.hideOutput = true;
+  }
+
+  const node: any = {
     id,
     position,
-    width: 300,
-    height: Math.max(300, 150 + (inputParams.length + inputAnchors.length) * 50),
-    type: 'customNode',
+    width: isAgentFlow ? 103 : 300,
+    height: isAgentFlow ? 66 : Math.max(300, 150 + (inputParams.length + inputAnchors.length) * 50),
+    type: isAgentFlow ? 'agentFlow' : 'customNode',
     data,
     selected: false
   };
+
+  // Add agentflow-specific node properties
+  if (isAgentFlow) {
+    node.positionAbsolute = { ...position };
+  }
+
+  return node;
 }
 
 // === FLOWISE API HELPERS ===
@@ -715,136 +977,251 @@ function getNodeSchema(name: string): string {
     return JSON.stringify({ error: `Node "${name}" not found` });
   }
 
-  const inputs = query(`
-    SELECT input_name, input_label, input_type, description, optional, default_value, options, additional_params
-    FROM node_inputs
-    WHERE node_name = ?
-    ORDER BY additional_params, input_label
-  `, [name]);
-
   const baseClasses = JSON.parse(node.base_classes || '[]');
-  const credential = node.credential ? JSON.parse(node.credential) : null;
-
-  // Use a placeholder node ID - AI should replace "0" with their desired suffix
+  const isAgentFlow = node.is_agentflow === 1;
   const nodeId = `${name}_0`;
 
-  // Types that are parameters (UI fields), not connection anchors
-  // IMPORTANT: 'multiOptions' must be here - it's a multi-select UI field, not a node connection
-  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'multiOptions', 'asyncOptions', 'json', 'code', 'file', 'credential'];
+  // Get credential if exists
+  const credential = queryOne(`SELECT * FROM node_credentials WHERE node_name = ?`, [name]);
 
-  const inputParams: any[] = [];
-  const inputAnchors: any[] = [];
-  const inputsObj: Record<string, any> = {};
+  // Helper: Build input param object with ALL fields (matches Flowise UI exactly)
+  function buildInputParam(input: any, nodeId: string): any {
+    const param: any = {
+      label: input.input_label,
+      name: input.input_name,
+      type: input.input_type
+    };
 
-  // Add credential to inputParams if it exists
-  if (credential) {
-    inputParams.push({
-      label: credential.label || 'Connect Credential',
-      name: credential.name || 'credential',
-      type: 'credential',
-      credentialNames: credential.credentialNames || [],
-      id: `${nodeId}-input-credential-credential`
-    });
+    // Add loadMethod BEFORE other fields (Flowise order)
+    if (input.load_method) param.loadMethod = input.load_method;
+    if (input.load_config) param.loadConfig = true;
+
+    // Description and optional
+    if (input.description) param.description = input.description;
+    if (input.is_optional) param.optional = true;
+
+    // Default value (parse based on type)
+    if (input.default_value !== null) {
+      if (input.input_type === 'boolean') {
+        param.default = input.default_value === 'true' || input.default_value === '1';
+      } else if (input.input_type === 'number') {
+        param.default = input.default_value;
+      } else {
+        param.default = input.default_value;
+      }
+    }
+
+    // Variable support
+    if (input.accept_variable) param.acceptVariable = true;
+    if (input.accept_node_output) param.acceptNodeOutputAsVariable = true;
+
+    // Special generators
+    if (input.generate_instruction) param.generateInstruction = true;
+    if (input.generate_doc_store_desc) param.generateDocStoreDescription = true;
+    if (input.hide_code_execute) param.hideCodeExecute = true;
+
+    // Text area rows
+    if (input.rows) param.rows = input.rows;
+
+    // Placeholder
+    if (input.placeholder) param.placeholder = input.placeholder;
+
+    // Get options from input_options table
+    const options = query(`
+      SELECT option_label, option_name, option_description
+      FROM input_options
+      WHERE input_id = ?
+      ORDER BY sort_order
+    `, [input.id]);
+
+    if (options.length > 0) {
+      param.options = options.map((opt: any) => {
+        const o: any = { label: opt.option_label, name: opt.option_name };
+        if (opt.option_description) o.description = opt.option_description;
+        return o;
+      });
+    }
+
+    // Show/hide conditions
+    if (input.show_condition) param.show = JSON.parse(input.show_condition);
+    if (input.hide_condition) param.hide = JSON.parse(input.hide_condition);
+
+    // Get nested array inputs
+    if (input.input_type === 'array') {
+      const nestedInputs = query(`
+        SELECT * FROM node_inputs
+        WHERE parent_id = ?
+        ORDER BY sort_order
+      `, [input.id]);
+
+      if (nestedInputs.length > 0) {
+        param.array = nestedInputs.map((nested: any) => buildInputParam(nested, nodeId));
+      }
+    }
+
+    // Add ID last (Flowise puts it at end)
+    param.id = `${nodeId}-input-${input.input_name}-${input.input_type}`;
+
+    // Display flag for agentflow
+    if (isAgentFlow) {
+      // Calculate display based on show conditions
+      param.display = true;
+    }
+
+    return param;
   }
 
-  // Process each input field
-  for (const input of inputs) {
-    const inputType = input.input_type;
-    const inputName = input.input_name;
-    const isParam = paramTypes.includes(inputType);
+  // Get top-level inputs (parent_id IS NULL)
+  const topInputs = query(`
+    SELECT * FROM node_inputs
+    WHERE node_name = ? AND parent_id IS NULL
+    ORDER BY sort_order
+  `, [name]);
 
-    if (isParam) {
-      // This is a UI parameter (text field, dropdown, etc.)
-      const param: any = {
-        label: input.input_label,
-        name: inputName,
-        type: inputType,
-        id: `${nodeId}-input-${inputName}-${inputType}`
-      };
+  // Build inputParams and inputs object
+  const inputParams: any[] = [];
+  const inputsObj: Record<string, any> = {};
 
-      if (input.description) param.description = input.description;
-      if (input.optional) param.optional = true;
-      if (input.default_value !== null) param.default = input.default_value;
-      if (input.options) param.options = JSON.parse(input.options);
-      if (input.additional_params) param.additionalParams = true;
+  // Types that are UI parameters (not connection anchors)
+  const paramTypes = ['string', 'number', 'boolean', 'password', 'options', 'multiOptions', 'asyncOptions', 'json', 'code', 'file', 'credential', 'array'];
 
-      inputParams.push(param);
-      inputsObj[inputName] = input.default_value !== null ? input.default_value : '';
+  for (const input of topInputs) {
+    const param = buildInputParam(input, nodeId);
+    inputParams.push(param);
+
+    // Build default value for inputs object
+    if (input.default_value !== null) {
+      if (input.input_type === 'boolean') {
+        inputsObj[input.input_name] = input.default_value === 'true' || input.default_value === '1';
+      } else {
+        inputsObj[input.input_name] = input.default_value;
+      }
     } else {
-      // This is a connection anchor (connects to another node's output)
-      const anchor: any = {
-        label: input.input_label,
-        name: inputName,
-        type: inputType,
-        id: `${nodeId}-input-${inputName}-${inputType}`
-      };
+      inputsObj[input.input_name] = '';
+    }
+  }
 
-      if (input.optional) anchor.optional = true;
-      if (input.description) anchor.description = input.description;
-
-      inputAnchors.push(anchor);
-      inputsObj[inputName] = '';
+  // Build inputAnchors (for chatflow nodes - non-param types)
+  const inputAnchors: any[] = [];
+  if (!isAgentFlow) {
+    for (const input of topInputs) {
+      if (!paramTypes.includes(input.input_type)) {
+        const anchor: any = {
+          label: input.input_label,
+          name: input.input_name,
+          type: input.input_type,
+          id: `${nodeId}-input-${input.input_name}-${input.input_type}`
+        };
+        if (input.is_optional) anchor.optional = true;
+        if (input.description) anchor.description = input.description;
+        inputAnchors.push(anchor);
+      }
     }
   }
 
   // Build outputAnchors
   const typeChain = baseClasses.join('|');
-  const outputAnchors = [{
-    id: `${nodeId}-output-${name}-${typeChain}`,
-    name: name,
-    label: node.label,
-    description: node.description,
-    type: typeChain.replace(/\|/g, ' | ')  // Format for display: "Type1 | Type2"
-  }];
+  let outputAnchors: any[];
 
-  // Return a ready-to-use node template
-  const nodeTemplate = {
-    id: nodeId,
-    position: { x: 0, y: 0 },
-    type: 'customNode',
-    width: 300,
-    height: Math.max(300, 150 + (inputParams.length + inputAnchors.length) * 50),
-    data: {
-      id: nodeId,
+  if (isAgentFlow) {
+    outputAnchors = [{
+      id: `${nodeId}-output-${name}`,
       label: node.label,
-      version: node.version,
+      name: name
+    }];
+  } else {
+    outputAnchors = [{
+      id: `${nodeId}-output-${name}-${typeChain}`,
       name: name,
-      type: node.type,
-      baseClasses: baseClasses,
-      category: node.category,
+      label: node.label,
       description: node.description,
-      inputParams: inputParams,
-      inputAnchors: inputAnchors,
-      inputs: inputsObj,
-      outputAnchors: outputAnchors,
-      outputs: {},
-      selected: false
-    },
+      type: typeChain.replace(/\|/g, ' | ')
+    }];
+  }
+
+  // Build the data object (matches Flowise UI exactly)
+  const data: any = {
+    loadMethods: {},  // Flowise UI includes this empty object
+    label: node.label,
+    name: name,
+    version: node.version,
+    type: node.type,
+    category: node.category,
+    description: node.description,
+    color: node.color,
+    baseClasses: baseClasses,
+    inputs: inputsObj,
+    filePath: node.file_path ? node.file_path.replace(/\\/g, '/').replace('flowise-source/packages/components/', '/usr/src/flowise/packages/server/node_modules/flowise-components/dist/').replace('.ts', '.js') : null,
+    inputAnchors: isAgentFlow ? [] : inputAnchors,
+    inputParams: inputParams,
+    outputs: {},
+    outputAnchors: outputAnchors,
+    id: nodeId,
     selected: false
   };
 
+  // Add credential if exists
+  if (credential) {
+    data.credential = {
+      label: credential.label,
+      name: credential.name,
+      type: credential.type,
+      credentialNames: credential.credential_names ? JSON.parse(credential.credential_names) : []
+    };
+  }
+
+  // Agentflow-specific properties
+  if (node.hide_input) data.hideInput = true;
+  if (node.hide_output) data.hideOutput = true;
+
+  // Build the node template
+  const nodeTemplate: any = {
+    id: nodeId,
+    position: { x: 0, y: 0 },
+    data: data,
+    type: isAgentFlow ? 'agentFlow' : 'customNode',
+    width: isAgentFlow ? 120 : 300,
+    height: isAgentFlow ? 66 : Math.max(300, 150 + (inputParams.length + inputAnchors.length) * 50),
+    selected: false,
+    dragging: false,
+    positionAbsolute: { x: 0, y: 0 }
+  };
+
+  // Build usage instructions
+  const usage: any = {
+    instructions: [
+      'This is a READY-TO-USE node template. Copy it exactly into your nodes array.',
+      'ONLY modify these fields:',
+      '  1. node.id and node.data.id - change suffix (e.g., ' + name + '_0 -> ' + name + '_1)',
+      '  2. node.position.x, node.position.y, node.positionAbsolute - set canvas coordinates',
+      '  3. node.data.inputs.* - fill in your actual values',
+      'After changing node.id, update ALL inputParams[].id and outputAnchors[].id',
+      'DO NOT remove any fields. DO NOT add fields. DO NOT restructure.',
+    ],
+    id_format: {
+      node_id: `${name}_<number>`,
+      inputParam_id: `${name}_<number>-input-<paramName>-<paramType>`,
+    }
+  };
+
+  if (isAgentFlow) {
+    usage.id_format.outputAnchor_id = `${name}_<number>-output-${name}`;
+    usage.flow_type = 'AGENTFLOW';
+    usage.edge_type = 'agentFlow';
+    usage.notes = [
+      'This is an AGENTFLOW node.',
+      'Edges must use type: "agentFlow" with data: {sourceColor, targetColor, isHumanInput}.'
+    ];
+  } else {
+    usage.id_format.inputAnchor_id = `${name}_<number>-input-<anchorName>-<anchorType>`;
+    usage.id_format.outputAnchor_id = `${name}_<number>-output-${name}-${typeChain}`;
+    usage.flow_type = 'CHATFLOW';
+    usage.edge_type = 'buttonedge';
+  }
+
   return JSON.stringify({
     node_template: nodeTemplate,
-    usage: {
-      instructions: [
-        'This is a READY-TO-USE node template. Copy it exactly into your nodes array.',
-        'ONLY modify these fields:',
-        '  1. node.id and node.data.id - change suffix (e.g., chatOpenAI_0 -> chatOpenAI_1)',
-        '  2. node.position.x and node.position.y - set canvas coordinates',
-        '  3. node.data.inputs.* - fill in your actual values (leave empty string for unconfigured)',
-        'After changing node.id, you MUST update ALL id fields that contain the old ID:',
-        '  - Every inputParams[].id',
-        '  - Every inputAnchors[].id',
-        '  - Every outputAnchors[].id',
-        'DO NOT remove any fields. DO NOT add fields. DO NOT restructure.',
-      ],
-      id_format: {
-        node_id: `${name}_<number>`,
-        inputParam_id: `${name}_<number>-input-<paramName>-<paramType>`,
-        inputAnchor_id: `${name}_<number>-input-<anchorName>-<anchorType>`,
-        outputAnchor_id: `${name}_<number>-output-${name}-${typeChain}`,
-      }
-    }
+    usage: usage
   }, null, 2);
 }
 
@@ -906,7 +1283,7 @@ function getTemplate(name: string): string {
 }
 
 function findCompatibleNodes(nodeName: string, direction: string = 'inputs'): string {
-  const node = queryOne(`SELECT base_classes FROM nodes WHERE name = ?`, [nodeName]);
+  const node = queryOne(`SELECT name, label, base_classes FROM nodes WHERE name = ?`, [nodeName]);
 
   if (!node) {
     return JSON.stringify({ error: `Node "${nodeName}" not found` });
@@ -915,39 +1292,105 @@ function findCompatibleNodes(nodeName: string, direction: string = 'inputs'): st
   const baseClasses = JSON.parse(node.base_classes || '[]') as string[];
 
   if (direction === 'inputs') {
-    const inputs = query(`SELECT input_type FROM node_inputs WHERE node_name = ?`, [nodeName]);
-    const inputTypes = inputs.map((i: any) => i.input_type);
+    // Find what nodes can plug INTO this node (what can connect to its inputs)
+    // Get all inputAnchors for this node (inputs that accept connections)
+    const inputs = query(`
+      SELECT input_name, input_label, input_type
+      FROM node_inputs
+      WHERE node_name = ?
+        AND input_type NOT IN ('string', 'number', 'boolean', 'options', 'multiOptions', 'asyncOptions', 'array', 'code', 'json', 'file', 'credential')
+        AND parent_id IS NULL
+    `, [nodeName]);
 
-    const allNodes = query(`SELECT name, label, category, base_classes FROM nodes`);
+    if (inputs.length === 0) {
+      return JSON.stringify({
+        node: node.label,
+        message: 'This node has no input anchors that accept other nodes',
+        compatible_inputs: []
+      }, null, 2);
+    }
 
-    const compatible = allNodes.filter((n: any) => {
-      const nodeBaseClasses = JSON.parse(n.base_classes || '[]') as string[];
-      return nodeBaseClasses.some(bc => inputTypes.includes(bc));
-    }).map((n: any) => ({
-      name: n.name,
-      label: n.label,
-      category: n.category,
-    }));
+    const inputResults: any[] = [];
 
-    return JSON.stringify({ compatible_inputs: compatible }, null, 2);
+    for (const input of inputs) {
+      const inputType = input.input_type;
+      // Get all types that are compatible with this input type
+      const compatibleTypes = getCompatibleOutputTypes(inputType);
+
+      // Find all nodes that output any of these compatible types
+      const allNodes = query(`SELECT name, label, category, base_classes FROM nodes`);
+      const compatibleNodes = allNodes.filter((n: any) => {
+        const nodeBaseClasses = JSON.parse(n.base_classes || '[]') as string[];
+        return nodeBaseClasses.some(bc => compatibleTypes.includes(bc));
+      }).map((n: any) => ({
+        name: n.name,
+        label: n.label,
+        category: n.category,
+        outputType: JSON.parse(n.base_classes || '[]')[0] // Primary output type
+      }));
+
+      inputResults.push({
+        inputName: input.input_name,
+        inputLabel: input.input_label,
+        acceptsType: inputType,
+        compatibleNodes: compatibleNodes
+      });
+    }
+
+    return JSON.stringify({
+      node: node.label,
+      inputAnchors: inputResults
+    }, null, 2);
+
   } else {
+    // Find what nodes this node can plug INTO (what inputs accept this node's output)
+    // Get all types that this node's output can connect to
+    const acceptingTypes = baseClasses.flatMap(bc => getAcceptingInputTypes(bc));
+    const uniqueAcceptingTypes = [...new Set(acceptingTypes)];
+
+    // Find all input anchors that accept any of these types
     const allInputs = query(`
-      SELECT DISTINCT n.name, n.label, n.category, ni.input_type
+      SELECT DISTINCT n.name, n.label, n.category, ni.input_name, ni.input_label, ni.input_type
       FROM nodes n
       JOIN node_inputs ni ON n.name = ni.node_name
+      WHERE ni.input_type NOT IN ('string', 'number', 'boolean', 'options', 'multiOptions', 'asyncOptions', 'array', 'code', 'json', 'file', 'credential')
+        AND ni.parent_id IS NULL
     `);
 
-    const compatible = allInputs.filter((i: any) =>
-      baseClasses.includes(i.input_type)
+    const compatibleInputs = allInputs.filter((i: any) =>
+      uniqueAcceptingTypes.includes(i.input_type) || isTypeCompatible(baseClasses[0] || '', i.input_type)
     ).map((i: any) => ({
-      name: i.name,
-      label: i.label,
+      nodeName: i.name,
+      nodeLabel: i.label,
       category: i.category,
+      inputName: i.input_name,
+      inputLabel: i.input_label,
+      inputType: i.input_type
     }));
 
-    const unique = Array.from(new Map(compatible.map((c: any) => [c.name, c])).values());
+    // Group by node
+    const byNode: Record<string, any> = {};
+    for (const input of compatibleInputs) {
+      if (!byNode[input.nodeName]) {
+        byNode[input.nodeName] = {
+          name: input.nodeName,
+          label: input.nodeLabel,
+          category: input.category,
+          inputs: []
+        };
+      }
+      byNode[input.nodeName].inputs.push({
+        name: input.inputName,
+        label: input.inputLabel,
+        type: input.inputType
+      });
+    }
 
-    return JSON.stringify({ compatible_outputs: unique }, null, 2);
+    return JSON.stringify({
+      node: node.label,
+      outputTypes: baseClasses,
+      canConnectTo: Object.values(byNode)
+    }, null, 2);
   }
 }
 
@@ -955,7 +1398,10 @@ function validateFlow(nodes: any[], edges: any[]): string {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const nodeNames = new Set<string>();
+  // Build node map for quick lookup
+  const nodeMap: Record<string, any> = {};
+  const nodeIds = new Set<string>();
+
   for (const node of nodes) {
     const nodeName = node.data?.name || node.type || node.name;
     if (!nodeName) {
@@ -963,19 +1409,100 @@ function validateFlow(nodes: any[], edges: any[]): string {
       continue;
     }
 
-    const exists = queryOne(`SELECT 1 FROM nodes WHERE name = ?`, [nodeName]);
-    if (!exists) {
-      errors.push(`Node type "${nodeName}" does not exist`);
+    const dbNode = queryOne(`SELECT name, label, base_classes, is_agentflow FROM nodes WHERE name = ?`, [nodeName]);
+    if (!dbNode) {
+      errors.push(`Node type "${nodeName}" does not exist in Flowise`);
+    } else {
+      nodeMap[node.id] = {
+        ...node,
+        dbInfo: dbNode,
+        baseClasses: JSON.parse(dbNode.base_classes || '[]')
+      };
     }
-    nodeNames.add(node.id);
+    nodeIds.add(node.id);
   }
 
+  // Check for required node types in chatflows
+  const hasEndpoint = nodes.some(n => {
+    const name = n.data?.name || n.type || n.name;
+    // Chains, agents, and other endpoint nodes
+    return name?.toLowerCase().includes('chain') || name?.toLowerCase().includes('agent');
+  });
+
+  if (nodes.length > 0 && !hasEndpoint) {
+    warnings.push('Flow has no endpoint node (Chain or Agent) - it may not be executable');
+  }
+
+  // Validate edges
   for (const edge of edges) {
-    if (!nodeNames.has(edge.source)) {
+    // Basic existence check
+    if (!nodeIds.has(edge.source)) {
       errors.push(`Edge references non-existent source node: ${edge.source}`);
+      continue;
     }
-    if (!nodeNames.has(edge.target)) {
+    if (!nodeIds.has(edge.target)) {
       errors.push(`Edge references non-existent target node: ${edge.target}`);
+      continue;
+    }
+
+    const sourceNode = nodeMap[edge.source];
+    const targetNode = nodeMap[edge.target];
+
+    if (!sourceNode || !targetNode) continue;
+
+    // Validate edge handles (sourceHandle and targetHandle)
+    if (edge.sourceHandle && edge.targetHandle) {
+      // Parse the handle formats:
+      // sourceHandle: "nodeName_nodeId-output-outputName-outputType" or just "nodeId"
+      // targetHandle: "nodeName_nodeId-input-inputName-inputType" or just "nodeId"
+
+      // Extract source output type from sourceHandle if it follows the pattern
+      const sourceHandleParts = edge.sourceHandle.split('-output-');
+      const targetHandleParts = edge.targetHandle.split('-input-');
+
+      if (sourceHandleParts.length === 2 && targetHandleParts.length === 2) {
+        const sourceOutputType = sourceHandleParts[1]; // e.g., "chatOpenAI-ChatOpenAI"
+        const targetInputInfo = targetHandleParts[1];  // e.g., "model-BaseChatModel"
+
+        // Extract the actual types
+        const sourceType = sourceOutputType.split('-').pop() || '';
+        const targetType = targetInputInfo.split('-').pop() || '';
+
+        if (sourceType && targetType) {
+          // Check if the connection is valid
+          if (!isTypeCompatible(sourceType, targetType)) {
+            // Check using the node's baseClasses as fallback
+            const sourceBaseClasses = sourceNode.baseClasses || [];
+            const isCompatible = sourceBaseClasses.some((bc: string) => isTypeCompatible(bc, targetType));
+
+            if (!isCompatible) {
+              errors.push(
+                `Incompatible edge: ${sourceNode.dbInfo?.label || edge.source} (outputs ${sourceType}) ` +
+                `cannot connect to ${targetNode.dbInfo?.label || edge.target} input (expects ${targetType})`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Check for agentflow vs chatflow mixing
+    const sourceIsAgentflow = sourceNode.dbInfo?.is_agentflow;
+    const targetIsAgentflow = targetNode.dbInfo?.is_agentflow;
+
+    if (sourceIsAgentflow !== targetIsAgentflow) {
+      warnings.push(
+        `Mixed flow types: ${sourceNode.dbInfo?.label} is ${sourceIsAgentflow ? 'agentflow' : 'chatflow'} ` +
+        `but ${targetNode.dbInfo?.label} is ${targetIsAgentflow ? 'agentflow' : 'chatflow'}`
+      );
+    }
+
+    // Check edge type consistency
+    if (sourceIsAgentflow && edge.type !== 'agentFlow') {
+      warnings.push(`Edge from agentflow node ${edge.source} should use type: "agentFlow"`);
+    }
+    if (!sourceIsAgentflow && !targetIsAgentflow && edge.type !== 'buttonedge') {
+      warnings.push(`Edge in chatflow should use type: "buttonedge", got: "${edge.type}"`);
     }
   }
 
@@ -983,6 +1510,12 @@ function validateFlow(nodes: any[], edges: any[]): string {
     valid: errors.length === 0,
     errors,
     warnings,
+    summary: {
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      errorCount: errors.length,
+      warningCount: warnings.length
+    }
   }, null, 2);
 }
 

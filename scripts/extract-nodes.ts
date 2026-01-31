@@ -20,6 +20,15 @@ interface NodeInput {
   placeholder?: string;
   loadMethod?: string;
   credentialNames?: string[];
+  // Agentflow-specific input properties
+  show?: Record<string, any>;           // Conditional display rules
+  hide?: Record<string, any>;           // Conditional hide rules
+  acceptVariable?: boolean;             // Support for variables
+  acceptNodeOutputAsVariable?: boolean; // Support for node outputs
+  loadConfig?: boolean;                 // Load configuration flag
+  refresh?: boolean;                    // Refresh on dependency change
+  freeSolo?: boolean;                   // Allow custom values in options
+  array?: NodeInput[];                  // Nested array structure for array type inputs
 }
 
 interface NodeCredential {
@@ -42,6 +51,12 @@ interface ExtractedNode {
   inputs: NodeInput[];
   outputs?: any[];
   filePath: string;
+  // Agentflow-specific node properties
+  color?: string;        // Node display color (hex, e.g., "#7EE787")
+  hideInput?: boolean;   // Hide input connections (Start node)
+  hideOutput?: boolean;  // Hide output connections (Tool, DirectReply, etc.)
+  hint?: string;         // Tooltip/help text
+  tags?: string[];       // Node tags for filtering
 }
 
 interface MarketplaceTemplate {
@@ -166,12 +181,62 @@ function extractInputs(content: string): NodeInput[] {
       }
     }
 
+    // Agentflow-specific input properties
+    const acceptVariableMatch = objContent.match(/acceptVariable:\s*(true|false)/);
+    const acceptNodeOutputMatch = objContent.match(/acceptNodeOutputAsVariable:\s*(true|false)/);
+    const loadConfigMatch = objContent.match(/loadConfig:\s*(true|false)/);
+    const refreshMatch = objContent.match(/refresh:\s*(true|false)/);
+    const freeSoloMatch = objContent.match(/freeSolo:\s*(true|false)/);
+
+    if (acceptVariableMatch) input.acceptVariable = acceptVariableMatch[1] === 'true';
+    if (acceptNodeOutputMatch) input.acceptNodeOutputAsVariable = acceptNodeOutputMatch[1] === 'true';
+    if (loadConfigMatch) input.loadConfig = loadConfigMatch[1] === 'true';
+    if (refreshMatch) input.refresh = refreshMatch[1] === 'true';
+    if (freeSoloMatch) input.freeSolo = freeSoloMatch[1] === 'true';
+
+    // Extract show conditional - simple key:value or key: regex pattern
+    const showMatch = objContent.match(/show:\s*\{\s*\n?\s*([^}]+)\}/);
+    if (showMatch) {
+      input.show = parseConditionalObject(showMatch[1]);
+    }
+
+    // Extract hide conditional
+    const hideMatch = objContent.match(/hide:\s*\{\s*\n?\s*([^}]+)\}/);
+    if (hideMatch) {
+      input.hide = parseConditionalObject(hideMatch[1]);
+    }
+
     if (input.name && input.type) {
       inputs.push(input);
     }
   }
 
   return inputs;
+}
+
+// Helper to parse conditional show/hide objects
+function parseConditionalObject(content: string): Record<string, any> {
+  const result: Record<string, any> = {};
+  // Match patterns like: startInputType: 'formInput' or conditionType: ['value1', 'value2']
+  const propPattern = /['"`]?(\w+)['"`]?\s*:\s*(['"`]([^'"`]+)['"`]|\[([^\]]+)\]|\/([^\/]+)\/)/g;
+  let match;
+  while ((match = propPattern.exec(content)) !== null) {
+    const key = match[1];
+    if (match[3]) {
+      // String value
+      result[key] = match[3];
+    } else if (match[4]) {
+      // Array value
+      const arrayItems = match[4].match(/['"`]([^'"`]+)['"`]/g);
+      if (arrayItems) {
+        result[key] = arrayItems.map(s => s.replace(/['"`]/g, ''));
+      }
+    } else if (match[5]) {
+      // Regex value (stored as string)
+      result[key] = match[5];
+    }
+  }
+  return result;
 }
 
 // Extract credential object
@@ -236,7 +301,14 @@ function parseNodeFile(filePath: string): ExtractedNode | null {
     const inputs = extractInputs(content);
     const credential = extractCredential(content);
 
-    return {
+    // Extract agentflow-specific node properties
+    const color = extractStringValue(content, 'color');
+    const hideInput = content.includes('this.hideInput = true');
+    const hideOutput = content.includes('this.hideOutput = true');
+    const hint = extractStringValue(content, 'hint');
+    const tags = extractArrayStrings(content, 'tags');
+
+    const node: ExtractedNode = {
       name,
       label,
       version: version || 1,
@@ -249,10 +321,33 @@ function parseNodeFile(filePath: string): ExtractedNode | null {
       inputs,
       filePath: path.relative(process.cwd(), filePath)
     };
+
+    // Only include agentflow properties if they have values
+    if (color) node.color = color;
+    if (hideInput) node.hideInput = true;
+    if (hideOutput) node.hideOutput = true;
+    if (hint) node.hint = hint;
+    if (tags && tags.length > 0) node.tags = tags;
+
+    return node;
   } catch (error) {
     console.error(`Error parsing ${filePath}:`, error);
     return null;
   }
+}
+
+// Extract array of strings (for tags)
+function extractArrayStrings(content: string, propertyName: string): string[] | null {
+  const pattern = new RegExp(`this\\.${propertyName}\\s*=\\s*\\[([^\\]]+)\\]`);
+  const match = content.match(pattern);
+  if (!match) return null;
+
+  const strings: string[] = [];
+  const stringMatches = match[1].matchAll(/['"`]([^'"`]+)['"`]/g);
+  for (const m of stringMatches) {
+    strings.push(m[1]);
+  }
+  return strings.length > 0 ? strings : null;
 }
 
 // Parse marketplace templates
